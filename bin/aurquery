@@ -19,6 +19,10 @@ def info_url(packages: List[str], server: str = OFFICIAL_AUR_URL) -> str:
     return server + '/rpc/?v=5&type=info&' + '&'.join(['arg[]={}'.format(quote(x)) for x in packages])
 
 
+def search_url(package: str, server: str = OFFICIAL_AUR_URL) -> str:
+    return server + '/rpc/?v=5&type=search&arg={}'.format(quote(package))
+
+
 def query(url: str):
     with closing(urlopen(url)) as request:
         return json.loads(request.read().decode())
@@ -50,22 +54,26 @@ def do_getpkgbuild(packages: List[str], directory: str) -> None:
             shutil.move(d, output_directory)
 
 
-def do_query(query_dict, args) -> None:
+def do_sync_search(packages: List[str]) -> None:
     # TODO: Pretty output
-    print(json.dumps(query_dict, indent=4))
+    # TODO: concurrent query
+    query_results = [query(search_url(package)) for package in packages]
+    for r in query_results:
+        print(json.dumps(r, indent=4))
 
 
 def main() -> None:
     parser = ArgumentParser()
     group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument('--query', '-Q', action='store_true')
+    group.add_argument('--sync', '-S', action='store_true')
     group.add_argument('--getpkgbuild', '-G', action='store_true')
     parser.add_argument('package', nargs='+')
     parser.add_argument('--directory', '-d', default='')
+    parser.add_argument('--search', '-s', action='store_true')
     args = parser.parse_args()
 
-    if args.query:
-        do_query(query_result, args)
+    if args.sync and args.search:
+        do_sync_search(args.package)
     elif args.getpkgbuild:
         do_getpkgbuild(args.package, args.directory)
 
