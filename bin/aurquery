@@ -35,7 +35,8 @@ def do_getpkgbuild(packages: List[str], directory: str) -> None:
                 with closing(urlopen(OFFICIAL_AUR_URL + package['URLPath'])) as request:
                     t.write(request.read())
                     t.flush()
-                subprocess.run(['tar', 'xvf', t.name, '-C', temp_dir], stderr=subprocess.DEVNULL)
+                subprocess.run(['tar', 'xvf', t.name, '-C', temp_dir],
+                               stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
 
         def listdir_only_directory(path: str) -> List[str]:
             def absolute_path(p: str) -> str:
