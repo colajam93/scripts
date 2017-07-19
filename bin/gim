@@ -187,6 +187,11 @@ class GitIgnore:
                 name = token.value
             else:
                 current.append(token)
+        if state == EntryType.TEMPLATE:
+            line = 0 if not current else current[-1].line
+            raise ParseError(line, 'Missing {}'.format(TokenType.TEMPLATE_END))
+        else:
+            save_current()
         return result
 
 
