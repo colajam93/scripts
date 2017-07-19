@@ -1,0 +1,298 @@
+#!/usr/bin/env python3
+
+import errno
+import os
+import os.path
+import sys
+from argparse import ArgumentParser
+from contextlib import closing
+from enum import Enum, auto
+from itertools import tee, filterfalse
+from re import compile, match
+from typing import Optional, Iterable, TypeVar, Callable, Tuple, List
+from urllib.request import urlopen
+
+
+class C:
+    APPEND = 'append'
+    ANONYMOUS = 'Anonymous'
+    GET = 'get'
+    GIT_IGNORE = '.gitignore'
+    GIT_IGNORE_IO_URL_TEMPLATE = 'https://www.gitignore.io/api/{}'
+    LIST = 'list'
+    LIST_TEMPLATES = 'list-templates'
+    TEMPLATE_BEGIN_IDENTIFIER = '# Created by'
+    TEMPLATE_END_IDENTIFIER = '# End of'
+    TEMPLATE_NAME_IDENTIFIER = '###'
+    COMMENT_IDENTIFIER = '#'
+
+
+class AnsiColors:
+    RESET = '\033[0m'
+    RED = '\033[91m'
+
+
+class Meta:
+    T = TypeVar('T')
+
+
+class RE:
+    TEMPLATE_NAME = compile(r'^{} (?P<name>.+) {}$'.format(C.TEMPLATE_NAME_IDENTIFIER, C.TEMPLATE_NAME_IDENTIFIER))
+
+
+class TokenType(Enum):
+    COMMENT = auto()
+    TEMPLATE_BEGIN = auto()
+    TEMPLATE_END = auto()
+    TEMPLATE_NAME = auto()
+    PATTERN = auto()
+
+
+class Token:
+    def __init__(self, token_type: TokenType, value: str, line: int) -> None:
+        self.token_type = token_type
+        self.value = value
+        self.line = line
+
+    def __repr__(self) -> str:
+        return '{} {}: {}'.format(self.line, self.token_type, self.value)
+
+    def __str__(self) -> str:
+        return repr(self)
+
+
+class EntryType(Enum):
+    TEMPLATE = auto()
+    USER_DEFINED = auto()
+
+
+class Entry:
+    def __init__(self, entry_type: EntryType, name: str, values: List[Token], url: Optional[str] = None) -> None:
+        self.entry_type = entry_type
+        self.name = name
+        self.values = values
+        self.url = url
+
+    def __repr__(self) -> str:
+        return '{} {} {} {}'.format(self.entry_type, self.name, self.url, self.values)
+
+    def __str__(self) -> str:
+        begin = self.values[0].line
+        end = self.values[-1].line
+        if begin == end:
+            return '{}({})'.format(self.name, begin)
+        else:
+            return '{}({}-{})'.format(self.name, begin, end)
+
+
+class ParseError(BaseException):
+    def __init__(self, line: int, message: str) -> None:
+        self.line = line
+        self.message = message
+
+
+class LexError(BaseException):
+    def __init__(self, line: int, message: str) -> None:
+        self.line = line
+        self.message = message
+
+
+class GitIgnore:
+    def __init__(self, path: Optional[str]) -> None:
+        self.path = path if path else os.path.join(os.getcwd(), C.GIT_IGNORE)
+        self._sanity_check()
+        with open(self.path, 'r') as f:
+            raw = f.read()
+        tokens = self._lexer(raw)
+        entries = self._parser(tokens)
+        templates, user_defines = partition(lambda e: e.entry_type == EntryType.TEMPLATE, entries)
+        self.templates = list(templates)
+        self.user_defines = list(user_defines)
+
+    @property
+    def entries(self) -> List[Entry]:
+        return self.templates + self.user_defines
+
+    def _sanity_check(self) -> None:
+        if not os.path.exists(self.path):
+            raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), self.path)
+
+    @staticmethod
+    def _lexer(raw: str) -> Iterable[Token]:
+        def lex(line: int, s: str) -> Optional[Token]:
+            if s == '':
+                return None
+            elif s.startswith(C.TEMPLATE_BEGIN_IDENTIFIER):
+                try:
+                    name = ''.join(s.split(C.TEMPLATE_BEGIN_IDENTIFIER)[1:]).strip()
+                    return Token(TokenType.TEMPLATE_BEGIN, name, line)
+                except IndexError:
+                    raise LexError(line, 'Invalid template begin token')
+            elif s.startswith(C.TEMPLATE_END_IDENTIFIER):
+                try:
+                    name = ''.join(s.split(C.TEMPLATE_END_IDENTIFIER)[1:]).strip()
+                    return Token(TokenType.TEMPLATE_END, name, line)
+                except IndexError:
+                    raise LexError(line, 'Invalid template end token')
+            elif s.startswith(C.TEMPLATE_NAME_IDENTIFIER):
+                m = match(RE.TEMPLATE_NAME, s)
+                if not m:
+                    raise LexError(line, 'Invalid template name token')
+                try:
+                    name = m.group('name')
+                except IndexError as e:
+                    raise LexError from e
+                return Token(TokenType.TEMPLATE_NAME, name, line)
+            elif s.startswith(C.COMMENT_IDENTIFIER):
+                return Token(TokenType.COMMENT, s, line)
+            else:
+                return Token(TokenType.PATTERN, s, line)
+
+        return filter(None, (lex(line, s) for (line, s) in enumerate(raw.split('\n'), 1)))
+
+    @staticmethod
+    def _parser(tokens: Iterable[Token]) -> List[Entry]:
+        url = ''
+        name = C.ANONYMOUS
+        state = EntryType.USER_DEFINED
+        current = []
+        result = []
+
+        def save_current() -> None:
+            nonlocal current
+            if not current:
+                return
+            result.append(Entry(state, name, current, url))
+            current = []
+
+        for token in tokens:
+            if token.token_type == TokenType.TEMPLATE_BEGIN:
+                if state == EntryType.USER_DEFINED:
+                    save_current()
+                    url = token.value
+                    state = EntryType.TEMPLATE
+                    name = C.ANONYMOUS
+                else:
+                    raise ParseError(token.line, 'Unexpected {}'.format(token.token_type))
+            elif token.token_type == TokenType.TEMPLATE_END:
+                if state == EntryType.TEMPLATE:
+                    save_current()
+                    url = None
+                    state = EntryType.USER_DEFINED
+                    name = C.ANONYMOUS
+                else:
+                    raise ParseError(token.line, 'Unexpected {}'.format(token.token_type))
+            elif token.token_type == TokenType.TEMPLATE_NAME:
+                save_current()
+                name = token.value
+            else:
+                current.append(token)
+        return result
+
+
+def print_error(s: str, **kwargs) -> None:
+    print('{}{}{}'.format(AnsiColors.RED, s, AnsiColors.RESET), **kwargs)
+
+
+def partition(p: Callable[[Meta.T], bool], iterable: Iterable[Meta.T]) -> Tuple[Iterable[Meta.T], Iterable[Meta.T]]:
+    t1, t2 = tee(iterable)
+    return filter(p, t2), filterfalse(p, t1)
+
+
+def to_lower(s: str) -> str:
+    return s.lower()
+
+
+def query(url: str) -> str:
+    with closing(urlopen(url)) as request:
+        return request.read().decode()
+
+
+def generate_api_url(payload: str) -> str:
+    return C.GIT_IGNORE_IO_URL_TEMPLATE.format(payload)
+
+
+def get_available_templates() -> List[str]:
+    url = generate_api_url(C.LIST)
+    result = query(url)
+    return [y for x in result.strip().split('\n') for y in x.split(',')]
+
+
+def get_templates(templates: List[str]) -> str:
+    url = generate_api_url(','.join(map(to_lower, templates)))
+    return query(url)
+
+
+def do_append(file: Optional[str], templates: List[str]) -> None:
+    gi = GitIgnore(file)
+    result = get_templates(templates)
+    with open(gi.path, 'a') as f:
+        f.write(result)
+
+
+def do_get(templates: List[str]) -> None:
+    result = get_templates(templates)
+    print(result)
+
+
+def do_list(file: Optional[str]) -> None:
+    gi = GitIgnore(file)
+    if gi.templates:
+        print('templates: {}'.format(','.join(map(str, gi.templates))))
+    if gi.user_defines:
+        print('user defined patterns: {}'.format(','.join(map(str, gi.user_defines))))
+
+
+def do_list_templates(templates: List[str], show_error: bool) -> None:
+    available_templates = get_available_templates()
+    if templates:
+        available, not_available = partition(lambda x: x in available_templates, map(lambda x: x.lower(), templates))
+        for t in available:
+            print(t)
+        if show_error:
+            for t in not_available:
+                print_error('error: template {} was not found'.format(t), file=sys.stderr)
+    else:
+        for t in available_templates:
+            print(t)
+
+
+def main() -> None:
+    def setup_sub_commands_parser(scp) -> None:
+        def setup_list_parser(ps) -> None:
+            p = ps.add_parser(C.LIST)
+            p.add_argument('file', nargs='?', default=None)
+            p.set_defaults(func=lambda a: do_list(a.file))
+
+        def setup_list_templates_parser(ps) -> None:
+            p = ps.add_parser(C.LIST_TEMPLATES)
+            p.add_argument('templates', nargs='*')
+            p.add_argument('-e', '--show-error', action='store_true')
+            p.set_defaults(func=lambda a: do_list_templates(a.templates, a.show_error))
+
+        def setup_get_parser(ps) -> None:
+            p = ps.add_parser(C.GET)
+            p.add_argument('templates', nargs='+')
+            p.set_defaults(func=lambda a: do_get(a.templates))
+
+        def setup_append_parser(ps) -> None:
+            p = ps.add_parser(C.APPEND)
+            p.add_argument('file', nargs='?', default=None)
+            p.add_argument('templates', nargs='+')
+            p.set_defaults(func=lambda a: do_append(a.file, a.templates))
+
+        setup_list_parser(scp)
+        setup_list_templates_parser(scp)
+        setup_get_parser(scp)
+        setup_append_parser(scp)
+
+    parser = ArgumentParser()
+    subparsers = parser.add_subparsers(dest='command')
+    subparsers.required = True
+    setup_sub_commands_parser(subparsers)
+    args = parser.parse_args()
+    args.func(args)
+
+
+if __name__ == '__main__':
+    main()
