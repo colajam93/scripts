@@ -38,7 +38,7 @@ class Meta:
 
 
 class RE:
-    TEMPLATE_NAME = compile(r'^{} (?P<name>.+) {}$'.format(C.TEMPLATE_NAME_IDENTIFIER, C.TEMPLATE_NAME_IDENTIFIER))
+    TEMPLATE_NAME = compile(fr'^{C.TEMPLATE_NAME_IDENTIFIER} (?P<name>.+) {C.TEMPLATE_NAME_IDENTIFIER}$')
 
 
 class TokenType(Enum):
@@ -56,7 +56,7 @@ class Token:
         self.line = line
 
     def __repr__(self) -> str:
-        return '{} {}: {}'.format(self.line, self.token_type, self.value)
+        return f'{self.line} {self.token_type}: {self.value}'
 
     def __str__(self) -> str:
         return repr(self)
@@ -78,18 +78,18 @@ class Entry:
         self.url = url
 
     def __repr__(self) -> str:
-        return '{} {} {} {}'.format(self.entry_type, self.name, self.url, self.values)
+        return f'{self.entry_type} {self.name} {self.url} {self.values}'
 
     def __str__(self) -> str:
         begin = self.values[0].line
         end = self.values[-1].line
         if begin == end:
-            return '{}({})'.format(self.name, begin)
+            return f'{self.name}({begin})'
         else:
-            return '{}({}-{})'.format(self.name, begin, end)
+            return f'{self.name}({begin}-{end})'
 
     def raw_str(self) -> str:
-        name = ['{} {} {}'.format(C.TEMPLATE_NAME_IDENTIFIER, self.name, C.TEMPLATE_NAME_IDENTIFIER)]
+        name = [f'{C.TEMPLATE_NAME_IDENTIFIER} {self.name} {C.TEMPLATE_NAME_IDENTIFIER}']
 
         if len(self.values) < 2:
             return '\n'.join(chain(name, map(lambda x: x.raw_str(), self.values)))
@@ -205,7 +205,7 @@ class GitIgnore:
                     state = EntryType.TEMPLATE
                     name = C.ANONYMOUS
                 else:
-                    raise ParseError(token.line, 'Unexpected {}'.format(token.token_type))
+                    raise ParseError(token.line, f'Unexpected {token.token_type}')
             elif token.token_type == TokenType.TEMPLATE_END:
                 if state == EntryType.TEMPLATE:
                     save_current()
@@ -213,7 +213,7 @@ class GitIgnore:
                     state = EntryType.USER_DEFINED
                     name = C.ANONYMOUS
                 else:
-                    raise ParseError(token.line, 'Unexpected {}'.format(token.token_type))
+                    raise ParseError(token.line, f'Unexpected {token.token_type}')
             elif token.token_type == TokenType.TEMPLATE_NAME:
                 save_current()
                 name = token.value
@@ -221,7 +221,7 @@ class GitIgnore:
                 current.append(token)
         if state == EntryType.TEMPLATE:
             line = 0 if not current else current[-1].line
-            raise ParseError(line, 'Missing {}'.format(TokenType.TEMPLATE_END))
+            raise ParseError(line, f'Missing {TokenType.TEMPLATE_END}')
         else:
             save_current()
         return result
@@ -241,7 +241,7 @@ class GitIgnore:
 
 
 def print_error(s: str, **kwargs) -> None:
-    print('{}{}{}'.format(AnsiColors.RED, s, AnsiColors.RESET), **kwargs)
+    print(f'{AnsiColors.RED}{s}{AnsiColors.RESET}', **kwargs)
 
 
 def partition(p: Callable[[Meta.T], bool], iterable: Iterable[Meta.T]) -> Tuple[Iterable[Meta.T], Iterable[Meta.T]]:
@@ -301,7 +301,7 @@ def do_list_templates(templates: List[str], show_error: bool) -> None:
             print(t)
         if show_error:
             for t in not_available:
-                print_error('error: template {} was not found'.format(t), file=sys.stderr)
+                print_error(f'error: template {t} was not found', file=sys.stderr)
     else:
         for t in available_templates:
             print(t)
