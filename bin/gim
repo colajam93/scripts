@@ -4,7 +4,7 @@ import errno
 import os
 import os.path
 import sys
-from argparse import ArgumentParser, REMAINDER
+from argparse import ArgumentParser
 from contextlib import closing
 from enum import Enum, auto
 from functools import reduce
@@ -422,8 +422,8 @@ def main() -> None:
     def setup_sub_commands_parser(scp) -> None:
         def setup_list_parser(ps) -> None:
             p = ps.add_parser(C.LIST)
-            p.add_argument('file', nargs='?', default=None)
-            p.set_defaults(func=lambda a: do_list(a.file))
+            p.add_argument('-i', '--input-file', default=None)
+            p.set_defaults(func=lambda a: do_list(a.input_file))
 
         def setup_list_templates_parser(ps) -> None:
             p = ps.add_parser(C.LIST_TEMPLATES)
@@ -438,22 +438,22 @@ def main() -> None:
 
         def setup_append_parser(ps) -> None:
             p = ps.add_parser(C.APPEND)
-            p.add_argument('file', nargs='?', default=None)
+            p.add_argument('-i', '--input-file', default=None)
             p.add_argument('templates', nargs='+')
-            p.set_defaults(func=lambda a: do_append(a.file, a.templates))
+            p.set_defaults(func=lambda a: do_append(a.input_file, a.templates))
 
         def setup_clean_parser(ps) -> None:
             p = ps.add_parser(C.CLEAN)
-            p.add_argument('file', nargs='?', default=None)
+            p.add_argument('-i', '--input-file', default=None)
             p.add_argument('-n', '--dry-run', action='store_true')
-            p.set_defaults(func=lambda a: do_clean(a.file, a.dry_run))
+            p.set_defaults(func=lambda a: do_clean(a.input_file, a.dry_run))
 
         def setup_remove_parser(ps) -> None:
             p = ps.add_parser(C.REMOVE)
-            p.add_argument('file', nargs='?', default=None)
+            p.add_argument('-i', '--input-file', default=None)
             p.add_argument('-n', '--dry-run', action='store_true')
-            p.add_argument('target', nargs=REMAINDER)
-            p.set_defaults(func=lambda a: do_remove(a.file, a.target, a.dry_run))
+            p.add_argument('target', nargs='+')
+            p.set_defaults(func=lambda a: do_remove(a.input_file, a.target, a.dry_run))
 
         def setup_init_parser(ps) -> None:
             p = ps.add_parser(C.INIT)
