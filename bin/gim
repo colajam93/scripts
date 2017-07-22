@@ -47,6 +47,23 @@ class RE:
     INDEXED_ANONYMOUS_NAME = compile(fr'^{C.ANONYMOUS}[0-9]+$')
 
 
+class ParseError(BaseException):
+    def __init__(self, line: int, message: str) -> None:
+        self.line = line
+        self.message = message
+
+
+class LexError(BaseException):
+    def __init__(self, line: int, message: str) -> None:
+        self.line = line
+        self.message = message
+
+
+class OperationError(Exception):
+    def __init__(self, message: str) -> None:
+        self.message = message
+
+
 class TokenType(Enum):
     COMMENT = auto()
     TEMPLATE_BEGIN = auto()
@@ -60,12 +77,6 @@ class Token:
         self.token_type = token_type
         self.value = value
         self.line = line
-
-    def __repr__(self) -> str:
-        return f'{self.line} {self.token_type}: {self.value}'
-
-    def __str__(self) -> str:
-        return repr(self)
 
     def raw_str(self) -> str:
         return self.value
@@ -82,17 +93,6 @@ class Entry:
         self.name = name
         self.values = values
         self.url = url
-
-    def __repr__(self) -> str:
-        return f'{self.entry_type} {self.name} {self.url} {self.values}'
-
-    def __str__(self) -> str:
-        begin = self.values[0].line
-        end = self.values[-1].line
-        if begin == end:
-            return f'{self.name}({begin})'
-        else:
-            return f'{self.name}({begin}-{end})'
 
     def range_str(self) -> str:
         begin = self.values[0].line
@@ -116,23 +116,6 @@ class Entry:
                 else:
                     r.append(c.raw_str())
             return '\n'.join(r)
-
-
-def merge_entry(lhs: Entry, rhs: Entry, name: str, url: Optional[str] = None) -> Entry:
-    assert lhs.entry_type == rhs.entry_type
-    return Entry(lhs.entry_type, name, lhs.values + rhs.values, url)
-
-
-class ParseError(BaseException):
-    def __init__(self, line: int, message: str) -> None:
-        self.line = line
-        self.message = message
-
-
-class LexError(BaseException):
-    def __init__(self, line: int, message: str) -> None:
-        self.line = line
-        self.message = message
 
 
 class GitIgnore:
@@ -292,6 +275,11 @@ def get_templates(templates: Iterable[str]) -> str:
     return query(url)
 
 
+def merge_entry(lhs: Entry, rhs: Entry, name: str, url: Optional[str] = None) -> Entry:
+    assert lhs.entry_type == rhs.entry_type
+    return Entry(lhs.entry_type, name, lhs.values + rhs.values, url)
+
+
 def write_git_ignore(path: str, gi: GitIgnore) -> None:
     with open(path, 'w') as f:
         f.write(gi.raw_str())
@@ -360,11 +348,6 @@ def do_clean(file: Optional[str], dry_run: bool) -> None:
         print(new.raw_str())
     else:
         write_git_ignore(source.path, new)
-
-
-class OperationError(Exception):
-    def __init__(self, message: str) -> None:
-        self.message = message
 
 
 def do_remove(file: Optional[str], targets: List[str], dry_run: bool) -> None:
