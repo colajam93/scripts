@@ -3,7 +3,7 @@
 import os
 import os.path
 import sys
-from argparse import ArgumentParser
+from argparse import ArgumentParser, REMAINDER
 from contextlib import closing
 from enum import Enum, auto
 from functools import reduce
@@ -17,6 +17,7 @@ class C:
     APPEND = 'append'
     ANONYMOUS = 'Anonymous'
     CLEAN = 'clean'
+    COMMENT_IDENTIFIER = '#'
     GET = 'get'
     GIT_IGNORE = '.gitignore'
     GIT_IGNORE_IO_URL_TEMPLATE = 'https://www.gitignore.io/api/{}'
@@ -25,7 +26,7 @@ class C:
     TEMPLATE_BEGIN_IDENTIFIER = '# Created by'
     TEMPLATE_END_IDENTIFIER = '# End of'
     TEMPLATE_NAME_IDENTIFIER = '###'
-    COMMENT_IDENTIFIER = '#'
+    REMOVE = 'remove'
 
 
 class AnsiColors:
@@ -39,6 +40,7 @@ class Meta:
 
 class RE:
     TEMPLATE_NAME = compile(fr'^{C.TEMPLATE_NAME_IDENTIFIER} (?P<name>.+) {C.TEMPLATE_NAME_IDENTIFIER}$')
+    INDEXED_ANONYMOUS_NAME = compile(fr'^{C.ANONYMOUS}[0-9]+$')
 
 
 class TokenType(Enum):
@@ -131,12 +133,11 @@ class LexError(BaseException):
 
 class GitIgnore:
     def __init__(self, raw: str = '') -> None:
-        tokens = self._lexer(raw)
-        entries = self._parser(tokens)
-        templates, user_defines = partition(lambda e: e.entry_type == EntryType.TEMPLATE, entries)
-        self.templates = list(templates)
-        self.user_defines = list(user_defines)
+        self.templates = None
+        self.user_defines = None
         self._path = None
+        tokens = self._lexer(raw)
+        self.entries = self._parser(tokens)
 
     @property
     def path(self) -> str:
@@ -147,6 +148,12 @@ class GitIgnore:
     @property
     def entries(self) -> List[Entry]:
         return self.templates + self.user_defines
+
+    @entries.setter
+    def entries(self, entries: List[Entry]) -> None:
+        templates, user_defines = partition(lambda e: e.entry_type == EntryType.TEMPLATE, entries)
+        self.templates = list(templates)
+        self.user_defines = list(user_defines)
 
     @classmethod
     def from_file(cls, path: Optional[str]) -> 'GitIgnore':
@@ -347,6 +354,58 @@ def do_clean(file: Optional[str], dry_run: bool) -> None:
             f.write('\n')
 
 
+class OperationError(Exception):
+    def __init__(self, message: str) -> None:
+        self.message = message
+
+
+def do_remove(file: Optional[str], targets: List[str], dry_run: bool) -> None:
+    def add_index(entries: List[Entry]) -> List[Entry]:
+        anonymous_counter = 0
+        r = []
+        for e in entries:
+            if e.name == C.ANONYMOUS:
+                tmp = e
+                tmp.name = f'{C.ANONYMOUS}{anonymous_counter}'
+                anonymous_counter += 1
+                r.append(tmp)
+            else:
+                r.append(e)
+        return r
+
+    def remove_index(entries: List[Entry]) -> List[Entry]:
+        r = []
+        for e in entries:
+            if match(RE.INDEXED_ANONYMOUS_NAME, e.name):
+                tmp = e
+                tmp.name = C.ANONYMOUS
+                r.append(tmp)
+            else:
+                r.append(e)
+        return r
+
+    source = GitIgnore.from_file(file)
+    new = GitIgnore()
+
+    t = add_index(source.entries)
+    for i in targets:
+        tt = []
+        for j in t:
+            if j.name.lower() != i.lower():
+                tt.append(j)
+        if len(t) == len(tt):
+            raise OperationError(f'entry {i} was not found')
+        t = tt
+    new.entries = remove_index(t)
+
+    if dry_run:
+        print(new.raw_str())
+    else:
+        with open(source.path, 'w') as f:
+            f.write(new.raw_str())
+            f.write('\n')
+
+
 def main() -> None:
     def setup_sub_commands_parser(scp) -> None:
         def setup_list_parser(ps) -> None:
@@ -377,11 +436,19 @@ def main() -> None:
             p.add_argument('-n', '--dry-run', action='store_true')
             p.set_defaults(func=lambda a: do_clean(a.file, a.dry_run))
 
+        def setup_remove_parser(ps) -> None:
+            p = ps.add_parser(C.REMOVE)
+            p.add_argument('file', nargs='?', default=None)
+            p.add_argument('-n', '--dry-run', action='store_true')
+            p.add_argument('target', nargs=REMAINDER)
+            p.set_defaults(func=lambda a: do_remove(a.file, a.target, a.dry_run))
+
         setup_list_parser(scp)
         setup_list_templates_parser(scp)
         setup_get_parser(scp)
         setup_append_parser(scp)
         setup_clean_parser(scp)
+        setup_remove_parser(scp)
 
     parser = ArgumentParser()
     subparsers = parser.add_subparsers(dest='command')
