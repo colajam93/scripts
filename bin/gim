@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 
-import errno
 import os
 import os.path
 import sys
 from argparse import ArgumentParser
 from contextlib import closing
 from enum import Enum, auto
-from itertools import tee, filterfalse
+from functools import reduce
+from itertools import tee, filterfalse, chain
 from re import compile, match
 from typing import Optional, Iterable, TypeVar, Callable, Tuple, List
 from urllib.request import urlopen
@@ -16,6 +16,7 @@ from urllib.request import urlopen
 class C:
     APPEND = 'append'
     ANONYMOUS = 'Anonymous'
+    CLEAN = 'clean'
     GET = 'get'
     GIT_IGNORE = '.gitignore'
     GIT_IGNORE_IO_URL_TEMPLATE = 'https://www.gitignore.io/api/{}'
@@ -60,6 +61,9 @@ class Token:
     def __str__(self) -> str:
         return repr(self)
 
+    def raw_str(self) -> str:
+        return self.value
+
 
 class EntryType(Enum):
     TEMPLATE = auto()
@@ -84,6 +88,15 @@ class Entry:
         else:
             return '{}({}-{})'.format(self.name, begin, end)
 
+    def raw_str(self) -> str:
+        name = ['{} {} {}'.format(C.TEMPLATE_NAME_IDENTIFIER, self.name, C.TEMPLATE_NAME_IDENTIFIER)]
+        return '\n'.join(chain(name, map(lambda x: x.raw_str(), self.values)))
+
+
+def merge_entry(lhs: Entry, rhs: Entry, name: str, url: Optional[str] = None) -> Entry:
+    assert lhs.entry_type == rhs.entry_type
+    return Entry(lhs.entry_type, name, lhs.values + rhs.values, url)
+
 
 class ParseError(BaseException):
     def __init__(self, line: int, message: str) -> None:
@@ -98,24 +111,32 @@ class LexError(BaseException):
 
 
 class GitIgnore:
-    def __init__(self, path: Optional[str]) -> None:
-        self.path = path if path else os.path.join(os.getcwd(), C.GIT_IGNORE)
-        self._sanity_check()
-        with open(self.path, 'r') as f:
-            raw = f.read()
+    def __init__(self, raw: str = '') -> None:
         tokens = self._lexer(raw)
         entries = self._parser(tokens)
         templates, user_defines = partition(lambda e: e.entry_type == EntryType.TEMPLATE, entries)
         self.templates = list(templates)
         self.user_defines = list(user_defines)
+        self._path = None
+
+    @property
+    def path(self) -> str:
+        if not self._path:
+            raise AttributeError
+        return self._path
 
     @property
     def entries(self) -> List[Entry]:
         return self.templates + self.user_defines
 
-    def _sanity_check(self) -> None:
-        if not os.path.exists(self.path):
-            raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), self.path)
+    @classmethod
+    def from_file(cls, path: Optional[str]) -> 'GitIgnore':
+        path_ = path if path else os.path.join(os.getcwd(), C.GIT_IGNORE)
+        with open(path_, 'r') as f:
+            raw = f.read()
+        r = cls(raw)
+        r._path = path_
+        return r
 
     @staticmethod
     def _lexer(raw: str) -> Iterable[Token]:
@@ -194,6 +215,15 @@ class GitIgnore:
             save_current()
         return result
 
+    def raw_str(self) -> str:
+        def f(es: Iterable[Entry]) -> Iterable[str]:
+            return map(lambda x: x.raw_str(), es)
+
+        url = f'gim (This {C.GIT_IGNORE} is cleaned by gim)'
+        prologue = [f'{C.TEMPLATE_BEGIN_IDENTIFIER} {url}']
+        epilogue = [f'{C.TEMPLATE_END_IDENTIFIER} {url}']
+        return '\n\n'.join(chain(prologue, f(self.templates), epilogue, f(self.user_defines)))
+
 
 def print_error(s: str, **kwargs) -> None:
     print('{}{}{}'.format(AnsiColors.RED, s, AnsiColors.RESET), **kwargs)
@@ -229,7 +259,7 @@ def get_templates(templates: List[str]) -> str:
 
 
 def do_append(file: Optional[str], templates: List[str]) -> None:
-    gi = GitIgnore(file)
+    gi = GitIgnore.from_file(file)
     result = get_templates(templates)
     with open(gi.path, 'a') as f:
         f.write(result)
@@ -241,7 +271,7 @@ def do_get(templates: List[str]) -> None:
 
 
 def do_list(file: Optional[str]) -> None:
-    gi = GitIgnore(file)
+    gi = GitIgnore.from_file(file)
     if gi.templates:
         print('templates: {}'.format(','.join(map(str, gi.templates))))
     if gi.user_defines:
@@ -260,6 +290,27 @@ def do_list_templates(templates: List[str], show_error: bool) -> None:
     else:
         for t in available_templates:
             print(t)
+
+
+def do_clean(file: Optional[str], dry_run: bool) -> None:
+    def normalize_anonymous_entries(entries: List[Entry]) -> List[Entry]:
+        t = partition(lambda x: x.name == C.ANONYMOUS, entries)
+        unnamed_entries, named_entries = list(t[0]), list(t[1])
+        r = named_entries
+        if unnamed_entries:
+            r.append(reduce(lambda x, y: merge_entry(x, y, C.ANONYMOUS), unnamed_entries))
+        return r
+
+    source = GitIgnore.from_file(file)
+    new = GitIgnore()
+    new.templates = normalize_anonymous_entries(source.templates)
+    new.user_defines = normalize_anonymous_entries(source.user_defines)
+    if dry_run:
+        print(new.raw_str())
+    else:
+        with open(source.path, 'w') as f:
+            f.write(new.raw_str())
+            f.write('\n')
 
 
 def main() -> None:
@@ -286,10 +337,17 @@ def main() -> None:
             p.add_argument('templates', nargs='+')
             p.set_defaults(func=lambda a: do_append(a.file, a.templates))
 
+        def setup_clean_parser(ps) -> None:
+            p = ps.add_parser(C.CLEAN)
+            p.add_argument('file', nargs='?', default=None)
+            p.add_argument('-n', '--dry-run', action='store_true')
+            p.set_defaults(func=lambda a: do_clean(a.file, a.dry_run))
+
         setup_list_parser(scp)
         setup_list_templates_parser(scp)
         setup_get_parser(scp)
         setup_append_parser(scp)
+        setup_clean_parser(scp)
 
     parser = ArgumentParser()
     subparsers = parser.add_subparsers(dest='command')
