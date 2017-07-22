@@ -29,6 +29,7 @@ class C:
     TEMPLATE_END_IDENTIFIER = '# End of'
     TEMPLATE_NAME_IDENTIFIER = '###'
     REMOVE = 'remove'
+    UPDATE = 'update'
 
 
 class AnsiColors:
@@ -135,9 +136,9 @@ class LexError(BaseException):
 
 class GitIgnore:
     def __init__(self, raw: str = '') -> None:
-        self.templates = None
-        self.user_defines = None
-        self._path = None
+        self.templates: List[Entry] = None
+        self.user_defines: List[Entry] = None
+        self._path: Optional[str] = None
         tokens = self._lexer(raw)
         self.entries = self._parser(tokens)
 
@@ -285,7 +286,7 @@ def get_available_templates() -> List[str]:
     return [y for x in result.strip().split('\n') for y in x.split(',')]
 
 
-def get_templates(templates: List[str]) -> str:
+def get_templates(templates: Iterable[str]) -> str:
     url = generate_api_url(','.join(map(to_lower, templates)))
     return query(url)
 
@@ -418,6 +419,22 @@ def do_init(templates: List[str], force: bool) -> None:
     write_git_ignore(path, gi)
 
 
+def do_update(file: Optional[str]) -> None:
+    source = GitIgnore.from_file(file)
+    available = get_available_templates()
+    exists, not_exists = partition(lambda x: x.name.lower() in available, source.templates)
+    new = GitIgnore(get_templates(map(lambda x: x.name.lower(), exists)))
+    new_names = [x.name.lower() for x in new.templates]
+    for i in not_exists:
+        if i.name == C.ANONYMOUS:
+            new.templates.append(i)
+        elif i.name.lower() not in new_names:
+            print_error(f'warning: template {i.name} was not found', file=sys.stderr)
+            new.templates.append(i)
+    new.user_defines = source.user_defines
+    write_git_ignore(source.path, new)
+
+
 def main() -> None:
     def setup_sub_commands_parser(scp) -> None:
         def setup_list_parser(ps) -> None:
@@ -461,6 +478,11 @@ def main() -> None:
             p.add_argument('-f', '--force', action='store_true')
             p.set_defaults(func=lambda a: do_init(a.templates, a.force))
 
+        def setup_update_parser(ps) -> None:
+            p = ps.add_parser(C.UPDATE)
+            p.add_argument('-i', '--input-file', default=None)
+            p.set_defaults(func=lambda a: do_update(a.input_file))
+
         setup_list_parser(scp)
         setup_list_templates_parser(scp)
         setup_get_parser(scp)
@@ -468,6 +490,7 @@ def main() -> None:
         setup_clean_parser(scp)
         setup_remove_parser(scp)
         setup_init_parser(scp)
+        setup_update_parser(scp)
 
     parser = ArgumentParser()
     subparsers = parser.add_subparsers(dest='command')
