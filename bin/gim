@@ -219,10 +219,14 @@ class GitIgnore:
         def f(es: Iterable[Entry]) -> Iterable[str]:
             return map(lambda x: x.raw_str(), es)
 
-        url = f'gim (This {C.GIT_IGNORE} is cleaned by gim)'
-        prologue = [f'{C.TEMPLATE_BEGIN_IDENTIFIER} {url}']
-        epilogue = [f'{C.TEMPLATE_END_IDENTIFIER} {url}']
-        return '\n\n'.join(chain(prologue, f(self.templates), epilogue, f(self.user_defines)))
+        # if there is no templates then suppress the template identifier line
+        if self.templates:
+            url = f'gim (This {C.GIT_IGNORE} is cleaned by gim)'
+            prologue = [f'{C.TEMPLATE_BEGIN_IDENTIFIER} {url}']
+            epilogue = [f'{C.TEMPLATE_END_IDENTIFIER} {url}']
+            return '\n\n'.join(chain(prologue, f(self.templates), epilogue, f(self.user_defines)))
+        else:
+            return '\n\n'.join(f(self.user_defines))
 
 
 def print_error(s: str, **kwargs) -> None:
