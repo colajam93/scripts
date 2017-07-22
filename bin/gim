@@ -19,6 +19,7 @@ class C:
     ANONYMOUS = 'Anonymous'
     CLEAN = 'clean'
     COMMENT_IDENTIFIER = '#'
+    DOCTOR = 'doctor'
     GET = 'get'
     GIT_IGNORE = '.gitignore'
     GIT_IGNORE_IO_URL_TEMPLATE = 'https://www.gitignore.io/api/{}'
@@ -435,6 +436,45 @@ def do_update(file: Optional[str]) -> None:
     write_git_ignore(source.path, new)
 
 
+def do_doctor(file: Optional[str]) -> None:
+    def f(entries: List[Entry], is_template: bool) -> bool:
+        if is_template:
+            print('templates:')
+        else:
+            print('user defined patterns:')
+        r = True
+        s = {}
+        for entry in entries:
+            if entry.name in s and s[entry.name]:
+                s[entry.name] = False
+                r = False
+                if entry.name == C.ANONYMOUS:
+                    print_error(
+                        f"warning: there were multiple {entry.name} entries (use 'gim {C.CLEAN}' to merge them)")
+                else:
+                    if is_template:
+                        print_error(
+                            f"warning: template {entry.name} was duplicated (use 'gim {C.UPDATE}' to merge them)")
+                    else:
+                        print_error(f'warning: template {entry.name} was duplicated (merge them manually)')
+            else:
+                s[entry.name] = True
+        if r:
+            print('ok')
+        return r
+
+    try:
+        source = GitIgnore.from_file(file)
+    except (ParseError, LexError) as e:
+        print_error(f"error: line: {e.line} {type(e).__name__} {e.message}")
+        sys.exit(1)
+    else:
+        r1 = f(source.templates, True)
+        r2 = f(source.user_defines, False)
+        if not r1 or not r2:
+            sys.exit(1)
+
+
 def main() -> None:
     def setup_sub_commands_parser(scp) -> None:
         def setup_list_parser(ps) -> None:
@@ -483,6 +523,11 @@ def main() -> None:
             p.add_argument('-i', '--input-file', default=None)
             p.set_defaults(func=lambda a: do_update(a.input_file))
 
+        def setup_doctor_parser(ps) -> None:
+            p = ps.add_parser(C.DOCTOR)
+            p.add_argument('-i', '--input-file', default=None)
+            p.set_defaults(func=lambda a: do_doctor(a.input_file))
+
         setup_list_parser(scp)
         setup_list_templates_parser(scp)
         setup_get_parser(scp)
@@ -491,6 +536,7 @@ def main() -> None:
         setup_remove_parser(scp)
         setup_init_parser(scp)
         setup_update_parser(scp)
+        setup_doctor_parser(scp)
 
     parser = ArgumentParser()
     subparsers = parser.add_subparsers(dest='command')
