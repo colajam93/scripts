@@ -461,53 +461,53 @@ def do_doctor(file: Optional[str]) -> None:
 def main() -> None:
     def setup_sub_commands_parser(scp) -> None:
         def setup_list_parser(ps) -> None:
-            p = ps.add_parser(C.LIST)
+            p = ps.add_parser(C.LIST, help=f'print list of entries in {C.GIT_IGNORE}')
             p.add_argument('-i', '--input-file', default=None)
             p.set_defaults(func=lambda a: do_list(a.input_file))
 
         def setup_list_templates_parser(ps) -> None:
-            p = ps.add_parser(C.LIST_TEMPLATES)
+            p = ps.add_parser(C.LIST_TEMPLATES, help='print list of available templates in gitignore.io')
             p.add_argument('templates', nargs='*')
             p.add_argument('-e', '--show-error', action='store_true')
             p.set_defaults(func=lambda a: do_list_templates(a.templates, a.show_error))
 
         def setup_get_parser(ps) -> None:
-            p = ps.add_parser(C.GET)
+            p = ps.add_parser(C.GET, help='download and print templates from gitignore.io')
             p.add_argument('templates', nargs='+')
             p.set_defaults(func=lambda a: do_get(a.templates))
 
         def setup_append_parser(ps) -> None:
-            p = ps.add_parser(C.APPEND)
+            p = ps.add_parser(C.APPEND, help=f'download and append templates to {C.GIT_IGNORE}')
             p.add_argument('-i', '--input-file', default=None)
             p.add_argument('templates', nargs='+')
             p.set_defaults(func=lambda a: do_append(a.input_file, a.templates))
 
         def setup_clean_parser(ps) -> None:
-            p = ps.add_parser(C.CLEAN)
+            p = ps.add_parser(C.CLEAN, help='merge entries')
             p.add_argument('-i', '--input-file', default=None)
             p.add_argument('-n', '--dry-run', action='store_true')
             p.set_defaults(func=lambda a: do_clean(a.input_file, a.dry_run))
 
         def setup_remove_parser(ps) -> None:
-            p = ps.add_parser(C.REMOVE)
+            p = ps.add_parser(C.REMOVE, help='remove entries')
             p.add_argument('-i', '--input-file', default=None)
             p.add_argument('-n', '--dry-run', action='store_true')
             p.add_argument('target', nargs='+')
             p.set_defaults(func=lambda a: do_remove(a.input_file, a.target, a.dry_run))
 
         def setup_init_parser(ps) -> None:
-            p = ps.add_parser(C.INIT)
+            p = ps.add_parser(C.INIT, help=f'download templates and create new {C.GIT_IGNORE}')
             p.add_argument('templates', nargs='+')
-            p.add_argument('-f', '--force', action='store_true')
+            p.add_argument('-f', '--force', action='store_true', help='force overwrite')
             p.set_defaults(func=lambda a: do_init(a.templates, a.force))
 
         def setup_update_parser(ps) -> None:
-            p = ps.add_parser(C.UPDATE)
+            p = ps.add_parser(C.UPDATE, help='re-download templates')
             p.add_argument('-i', '--input-file', default=None)
             p.set_defaults(func=lambda a: do_update(a.input_file))
 
         def setup_doctor_parser(ps) -> None:
-            p = ps.add_parser(C.DOCTOR)
+            p = ps.add_parser(C.DOCTOR, help=f'check {C.GIT_IGNORE}')
             p.add_argument('-i', '--input-file', default=None)
             p.set_defaults(func=lambda a: do_doctor(a.input_file))
 
