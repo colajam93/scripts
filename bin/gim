@@ -90,7 +90,18 @@ class Entry:
 
     def raw_str(self) -> str:
         name = ['{} {} {}'.format(C.TEMPLATE_NAME_IDENTIFIER, self.name, C.TEMPLATE_NAME_IDENTIFIER)]
-        return '\n'.join(chain(name, map(lambda x: x.raw_str(), self.values)))
+
+        if len(self.values) < 2:
+            return '\n'.join(chain(name, map(lambda x: x.raw_str(), self.values)))
+        else:
+            r = name + [self.values[0].raw_str()]
+            for p, c in zip(self.values, self.values[1:]):
+                # if current token is beginning of comments then insert empty line before comments
+                if c.token_type == TokenType.COMMENT and p.token_type != TokenType.COMMENT:
+                    r.append(f'\n{c.raw_str()}')
+                else:
+                    r.append(c.raw_str())
+            return '\n'.join(r)
 
 
 def merge_entry(lhs: Entry, rhs: Entry, name: str, url: Optional[str] = None) -> Entry:
