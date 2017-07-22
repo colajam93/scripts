@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import errno
 import os
 import os.path
 import sys
@@ -21,6 +22,7 @@ class C:
     GET = 'get'
     GIT_IGNORE = '.gitignore'
     GIT_IGNORE_IO_URL_TEMPLATE = 'https://www.gitignore.io/api/{}'
+    INIT = 'init'
     LIST = 'list'
     LIST_TEMPLATES = 'list-templates'
     TEMPLATE_BEGIN_IDENTIFIER = '# Created by'
@@ -406,6 +408,16 @@ def do_remove(file: Optional[str], targets: List[str], dry_run: bool) -> None:
             f.write('\n')
 
 
+def do_init(templates: List[str], force: bool) -> None:
+    path = os.path.join(os.getcwd(), C.GIT_IGNORE)
+    if not force and os.path.exists(path):
+        raise FileExistsError(errno.EEXIST, os.strerror(errno.EEXIST), path)
+    gi = GitIgnore(get_templates(templates))
+    with open(path, 'w') as f:
+        f.write(gi.raw_str())
+        f.write('\n')
+
+
 def main() -> None:
     def setup_sub_commands_parser(scp) -> None:
         def setup_list_parser(ps) -> None:
@@ -443,12 +455,19 @@ def main() -> None:
             p.add_argument('target', nargs=REMAINDER)
             p.set_defaults(func=lambda a: do_remove(a.file, a.target, a.dry_run))
 
+        def setup_init_parser(ps) -> None:
+            p = ps.add_parser(C.INIT)
+            p.add_argument('templates', nargs='+')
+            p.add_argument('-f', '--force', action='store_true')
+            p.set_defaults(func=lambda a: do_init(a.templates, a.force))
+
         setup_list_parser(scp)
         setup_list_templates_parser(scp)
         setup_get_parser(scp)
         setup_append_parser(scp)
         setup_clean_parser(scp)
         setup_remove_parser(scp)
+        setup_init_parser(scp)
 
     parser = ArgumentParser()
     subparsers = parser.add_subparsers(dest='command')
