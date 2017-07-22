@@ -88,6 +88,14 @@ class Entry:
         else:
             return f'{self.name}({begin}-{end})'
 
+    def range_str(self) -> str:
+        begin = self.values[0].line
+        end = self.values[-1].line
+        if begin == end:
+            return f'{begin}'
+        else:
+            return f'{begin}-{end}'
+
     def raw_str(self) -> str:
         name = [f'{C.TEMPLATE_NAME_IDENTIFIER} {self.name} {C.TEMPLATE_NAME_IDENTIFIER}']
 
@@ -286,11 +294,22 @@ def do_get(templates: List[str]) -> None:
 
 
 def do_list(file: Optional[str]) -> None:
+    anonymous_counter = 0
+
+    def f(e: Entry) -> str:
+        nonlocal anonymous_counter
+        if e.name == C.ANONYMOUS:
+            r = f'{e.name}{anonymous_counter}({e.range_str()})'
+            anonymous_counter += 1
+            return r
+        else:
+            return f'{e.name}({e.range_str()})'
+
     gi = GitIgnore.from_file(file)
     if gi.templates:
-        print('templates: {}'.format(','.join(map(str, gi.templates))))
+        print('templates: {}'.format(','.join(map(f, gi.templates))))
     if gi.user_defines:
-        print('user defined patterns: {}'.format(','.join(map(str, gi.user_defines))))
+        print('user defined patterns: {}'.format(','.join(map(f, gi.user_defines))))
 
 
 def do_list_templates(templates: List[str], show_error: bool) -> None:
