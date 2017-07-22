@@ -290,11 +290,17 @@ def get_templates(templates: List[str]) -> str:
     return query(url)
 
 
+def write_git_ignore(path: str, gi: GitIgnore) -> None:
+    with open(path, 'w') as f:
+        f.write(gi.raw_str())
+        f.write('\n')
+
+
 def do_append(file: Optional[str], templates: List[str]) -> None:
     gi = GitIgnore.from_file(file)
-    result = get_templates(templates)
-    with open(gi.path, 'a') as f:
-        f.write(result)
+    result = GitIgnore(get_templates(templates))
+    gi.templates += result.templates
+    write_git_ignore(gi.path, gi)
 
 
 def do_get(templates: List[str]) -> None:
@@ -351,9 +357,7 @@ def do_clean(file: Optional[str], dry_run: bool) -> None:
     if dry_run:
         print(new.raw_str())
     else:
-        with open(source.path, 'w') as f:
-            f.write(new.raw_str())
-            f.write('\n')
+        write_git_ignore(source.path, new)
 
 
 class OperationError(Exception):
@@ -403,9 +407,7 @@ def do_remove(file: Optional[str], targets: List[str], dry_run: bool) -> None:
     if dry_run:
         print(new.raw_str())
     else:
-        with open(source.path, 'w') as f:
-            f.write(new.raw_str())
-            f.write('\n')
+        write_git_ignore(source.path, new)
 
 
 def do_init(templates: List[str], force: bool) -> None:
@@ -413,9 +415,7 @@ def do_init(templates: List[str], force: bool) -> None:
     if not force and os.path.exists(path):
         raise FileExistsError(errno.EEXIST, os.strerror(errno.EEXIST), path)
     gi = GitIgnore(get_templates(templates))
-    with open(path, 'w') as f:
-        f.write(gi.raw_str())
-        f.write('\n')
+    write_git_ignore(path, gi)
 
 
 def main() -> None:
