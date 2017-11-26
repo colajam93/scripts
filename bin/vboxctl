@@ -23,7 +23,7 @@ def list_running_vms():
 
 def parse_v_box_manage_list_output(output):
     pattern = re.compile(
-        r'"(?P<name>[a-zA-Z0-9 ]+)" '
+        r'"(?P<name>.+)" '
         r'{(?P<uuid>[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})}')
     m = re.match(pattern, output)
     if not m:
