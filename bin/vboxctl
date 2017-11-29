@@ -5,6 +5,7 @@ import subprocess
 import re
 import sys
 import collections
+from typing import List
 
 LIST, LIST_VMS, START, POWEROFF, LOGIN, CLONE, REMOVE, SNAPSHOT, TAKE, RESTORE = (
     'list', 'list-vms', 'start', 'poweroff', 'login', 'clone', 'remove', 'snapshot', 'take', 'restore')
@@ -12,13 +13,11 @@ V_BOX_MANAGE = 'VBoxManage'
 
 
 def list_vms():
-    completed = subprocess.run([V_BOX_MANAGE, LIST, 'vms'], stdout=subprocess.PIPE)
-    return completed.stdout.decode().strip()
+    return run_for_output([V_BOX_MANAGE, LIST, 'vms']).strip()
 
 
 def list_running_vms():
-    completed = subprocess.run([V_BOX_MANAGE, LIST, 'runningvms'], stdout=subprocess.PIPE)
-    return completed.stdout.decode().strip()
+    return run_for_output([V_BOX_MANAGE, LIST, 'runningvms']).strip()
 
 
 def parse_v_box_manage_list_output(output):
@@ -35,6 +34,11 @@ def parse_v_box_manage_list_output(output):
 def run_with_exit_code(command):
     completed = subprocess.run(command)
     sys.exit(completed.returncode)
+
+
+def run_for_output(command: List[str]) -> str:
+    completed = subprocess.run(command, stdout=subprocess.PIPE)
+    return completed.stdout.decode()
 
 
 def do_list_common(args, list_func):
