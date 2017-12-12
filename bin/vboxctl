@@ -5,7 +5,7 @@ import subprocess
 import re
 import sys
 import collections
-from typing import List, Dict
+from typing import List, Dict, Iterator
 import socket
 
 LIST, LIST_VMS, START, POWEROFF, LOGIN, CLONE, REMOVE, SNAPSHOT, TAKE, RESTORE = (
@@ -18,6 +18,9 @@ class VBoxCtlError(Exception):
         self.message = message
 
 
+VMListItem = collections.namedtuple('VMListItem', ['name', 'uuid'])
+
+
 def list_vms():
     return run_for_output([V_BOX_MANAGE, LIST, 'vms']).strip()
 
@@ -26,18 +29,17 @@ def list_running_vms():
     return run_for_output([V_BOX_MANAGE, LIST, 'runningvms']).strip()
 
 
-def parse_v_box_manage_list_output(output):
+def parse_v_box_manage_list_output(output: str) -> VMListItem:
     pattern = re.compile(
         r'"(?P<name>.+)" '
         r'{(?P<uuid>[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})}')
     m = re.match(pattern, output)
     if not m:
         raise VBoxCtlError(f'cannot parse {output}')
-    vm_item = collections.namedtuple('VMItem', ['name', 'uuid'])
-    return vm_item(name=m.group('name'), uuid=m.group('uuid'))
+    return VMListItem(name=m.group('name'), uuid=m.group('uuid'))
 
 
-def run_with_exit_code(command):
+def run_with_exit_code(command: List[str]) -> None:
     completed = subprocess.run(command)
     sys.exit(completed.returncode)
 
@@ -47,31 +49,26 @@ def run_for_output(command: List[str]) -> str:
     return completed.stdout.decode()
 
 
-def do_list_common(args, list_func):
-    vms = list_func()
-    if not vms:
-        sys.exit(0)
-    try:
-        vm_names = map(parse_v_box_manage_list_output, vms.split('\n'))
-    except ValueError:
-        sys.exit(1)
-    if args.name:
-        for n in vm_names:
-            print(n.name)
-    elif args.uuid:
-        for n in vm_names:
-            print(n.uuid)
-    else:
-        for n in vm_names:
-            print('"{}" {{{}}}'.format(n.name, n.uuid))
+def list_output(vms: Iterator[VMListItem], name: bool, uuid: bool) -> None:
+    for i in vms:
+        if name:
+            print(i.name)
+        elif uuid:
+            print(i.uuid)
+        else:
+            print(f'"{i.name}" {{{i.uuid}}}')
 
 
-def do_list(args):
-    do_list_common(args, list_running_vms)
+def do_list(args) -> None:
+    raw = run_for_output([V_BOX_MANAGE, LIST, 'runningvms']).strip()
+    if raw:
+        list_output(map(parse_v_box_manage_list_output, raw.split('\n')), args.name, args.uuid)
 
 
-def do_list_vms(args):
-    do_list_common(args, list_vms)
+def do_list_vms(args) -> None:
+    raw = run_for_output([V_BOX_MANAGE, LIST, 'vms']).strip()
+    if raw:
+        list_output(map(parse_v_box_manage_list_output, raw.split('\n')), args.name, args.uuid)
 
 
 def do_start(args):
