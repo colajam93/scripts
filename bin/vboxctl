@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import argparse
+from argparse import ArgumentParser
 import subprocess
 import re
 import sys
@@ -21,11 +21,7 @@ class VBoxCtlError(Exception):
 VMListItem = collections.namedtuple('VMListItem', ['name', 'uuid'])
 
 
-def list_vms():
-    return run_for_output([V_BOX_MANAGE, LIST, 'vms']).strip()
-
-
-def list_running_vms():
+def list_running_vms() -> str:
     return run_for_output([V_BOX_MANAGE, LIST, 'runningvms']).strip()
 
 
@@ -60,7 +56,7 @@ def list_output(vms: Iterator[VMListItem], name: bool, uuid: bool) -> None:
 
 
 def do_list(args) -> None:
-    raw = run_for_output([V_BOX_MANAGE, LIST, 'runningvms']).strip()
+    raw = list_running_vms()
     if raw:
         list_output(map(parse_v_box_manage_list_output, raw.split('\n')), args.name, args.uuid)
 
@@ -266,11 +262,7 @@ def do_snapshot_remove(args):
         run_with_exit_code(command)
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    subparsers = parser.add_subparsers(dest='command')
-    subparsers.required = True
-
+def setup_parser() -> ArgumentParser:
     def setup_list_parser(subparsers):
         desc = 'show running vm list'
         parser_list = subparsers.add_parser(LIST, description=desc, help=desc)
@@ -278,8 +270,6 @@ def main():
         group.add_argument('-n', '--name', action='store_true', help='show name only')
         group.add_argument('-u', '--uuid', action='store_true', help='show uuid only')
         parser_list.set_defaults(func=do_list)
-
-    setup_list_parser(subparsers)
 
     def setup_list_vms_parser(subparsers):
         desc = 'show vm list'
@@ -289,16 +279,12 @@ def main():
         group.add_argument('-u', '--uuid', action='store_true', help='show uuid only')
         parser_list_vms.set_defaults(func=do_list_vms)
 
-    setup_list_vms_parser(subparsers)
-
     def setup_start_parser(subparsers):
         desc = 'start vm'
         parser_start = subparsers.add_parser(START, description=desc, help=desc)
         parser_start.add_argument('target', help='vm name')
         parser_start.add_argument('-g', '--with-gui', action='store_true', help='start with gui window')
         parser_start.set_defaults(func=do_start)
-
-    setup_start_parser(subparsers)
 
     def setup_poweroff_parser(subparsers):
         desc = 'poweroff vm'
@@ -308,14 +294,10 @@ def main():
                                      help="use 'poweroff' instead of 'acpipowerbutton'")
         parser_poweroff.set_defaults(func=do_poweroff)
 
-    setup_poweroff_parser(subparsers)
-
     def setup_login_parser(subparsers):
         parser_login = subparsers.add_parser(LOGIN, description="execute 'ssh target'", help='login vm')
         parser_login.add_argument('target', help='vm name')
         parser_login.set_defaults(func=do_login)
-
-    setup_login_parser(subparsers)
 
     def setup_clone_parser(subparsers):
         desc = 'clone vm'
@@ -324,16 +306,12 @@ def main():
         parser_clone.add_argument('name', help='destination vm mane')
         parser_clone.set_defaults(func=do_clone)
 
-    setup_clone_parser(subparsers)
-
     def setup_remove_parser(subparsers):
         desc = 'remove vm'
         parser_remove = subparsers.add_parser(REMOVE, description=desc, help=desc)
         parser_remove.add_argument('target', help='vm name')
         parser_remove.add_argument('-f', '--force', action='store_true', help='remove vm without confirmation')
         parser_remove.set_defaults(func=do_remove)
-
-    setup_remove_parser(subparsers)
 
     def setup_snapshot_parser(subparsers):
         desc = 'snapshot operation'
@@ -363,8 +341,22 @@ def main():
         parser_remove.add_argument('-f', '--force', action='store_true', help='remove snapshot without confirmation')
         parser_remove.set_defaults(func=do_snapshot_remove)
 
-    setup_snapshot_parser(subparsers)
+    parser = ArgumentParser()
+    sps = parser.add_subparsers(dest='command')
+    sps.required = True
+    setup_list_parser(sps)
+    setup_list_vms_parser(sps)
+    setup_start_parser(sps)
+    setup_poweroff_parser(sps)
+    setup_login_parser(sps)
+    setup_clone_parser(sps)
+    setup_remove_parser(sps)
+    setup_snapshot_parser(sps)
+    return parser
 
+
+def main() -> None:
+    parser = setup_parser()
     args = parser.parse_args()
     args.func(args)
 
