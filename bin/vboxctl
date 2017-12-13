@@ -262,6 +262,15 @@ def do_snapshot_remove(args):
         run_with_exit_code(command)
 
 
+def do_show(args) -> None:
+    if not args.property:
+        command = [V_BOX_MANAGE, 'guestproperty', 'enumerate', args.target]
+        run_with_exit_code(command)
+    else:
+        p = guest_property(args.property, args.target)
+        print(p)
+
+
 def setup_parser() -> ArgumentParser:
     def setup_list_parser(subparsers):
         desc = 'show running vm list'
@@ -313,6 +322,13 @@ def setup_parser() -> ArgumentParser:
         parser_remove.add_argument('-f', '--force', action='store_true', help='remove vm without confirmation')
         parser_remove.set_defaults(func=do_remove)
 
+    def setup_show_parser(subparsers):
+        desc = 'show vm information'
+        p = subparsers.add_parser('show', description=desc, help=desc)
+        p.add_argument('target', help='vm name')
+        p.add_argument('-p', '--property')
+        p.set_defaults(func=do_show)
+
     def setup_snapshot_parser(subparsers):
         desc = 'snapshot operation'
         parser_snapshot = subparsers.add_parser(SNAPSHOT, description=desc, help=desc)
@@ -352,6 +368,7 @@ def setup_parser() -> ArgumentParser:
     setup_clone_parser(sps)
     setup_remove_parser(sps)
     setup_snapshot_parser(sps)
+    setup_show_parser(sps)
     return parser
 
 
