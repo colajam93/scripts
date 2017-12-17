@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 script_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-source $script_dir/libshellscript/libshellscript.sh
+source $script_dir/external/libshellscript/libshellscript/libshellscript.sh
 
 local_script_dir=$HOME/.local/bin
 install -d $local_script_dir
