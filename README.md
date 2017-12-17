@@ -2,6 +2,14 @@
 
 My scripts
 
+## Install
+
+```
+$ bash install.sh
+```
+
+and add `$HOME/.local/bin` to `$PATH`
+
 ## List of scripts
 
 ### aurquery
