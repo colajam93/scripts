@@ -5,7 +5,7 @@ import subprocess
 import re
 import sys
 import collections
-from typing import List, Dict, Iterator
+from typing import List, Dict, Iterator, Optional, Tuple
 import socket
 
 LIST, LIST_VMS, START, POWEROFF, LOGIN, CLONE, REMOVE, SNAPSHOT, TAKE, RESTORE = (
@@ -142,7 +142,7 @@ def guest_property(property_: str, target: str) -> str:
     if m:
         return m.group('v')
     else:
-        raise VBoxCtlError(f'vm {target} does not have the property f{property_}')
+        raise VBoxCtlError(f'vm {target} does not have the property {property_}')
 
 
 def nic_ip_address(nic_config: NicConfig, target: str) -> str:
@@ -262,12 +262,34 @@ def do_snapshot_remove(args):
         run_with_exit_code(command)
 
 
+def property_aliases() -> List[Tuple[str, str]]:
+    return [
+        (r'^ip_(?P<id_>[0-9]+)$', '/VirtualBox/GuestInfo/Net/{}/V4/IP'),
+        (r'^mac_(?P<id_>[0-9]+)$', '/VirtualBox/GuestInfo/Net/{}/MAC')
+    ]
+
+
+def parse_alias(s: str) -> Optional[str]:
+    for i in property_aliases():
+        p = re.compile(i[0])
+        m = re.match(p, s)
+        if m:
+            return i[1].format(*map(lambda x: m.group(x), range(1, p.groups + 1)))
+
+
 def do_show(args) -> None:
-    if not args.property:
+    if args.list_aliases:
+        for i in property_aliases():
+            print(f'{i[0]}\t{i[1]}')
+    elif not args.property:
         command = [V_BOX_MANAGE, 'guestproperty', 'enumerate', args.target]
         run_with_exit_code(command)
     else:
-        p = guest_property(args.property, args.target)
+        a = parse_alias(args.property)
+        if a:
+            p = guest_property(a, args.target)
+        else:
+            p = guest_property(args.property, args.target)
         print(p)
 
 
@@ -326,7 +348,8 @@ def setup_parser() -> ArgumentParser:
         desc = 'show vm information'
         p = subparsers.add_parser('show', description=desc, help=desc)
         p.add_argument('target', help='vm name')
-        p.add_argument('-p', '--property')
+        p.add_argument('property', nargs='?')
+        p.add_argument('-l', '--list-aliases', action='store_true')
         p.set_defaults(func=do_show)
 
     def setup_snapshot_parser(subparsers):
