@@ -495,6 +495,9 @@ def do_doctor(file: Optional[str], global_file: Optional[str]) -> None:
     except (ParseError, LexError) as e:
         print_error(f"error: line: {e.line} {type(e).__name__} {e.message}")
         sys.exit(1)
+    except FileNotFoundError:
+        print('there is no gitignore')
+        return
 
     r1 = check(source.templates, True, {i.name for i in global_.templates})
     result_list.append(r1)
