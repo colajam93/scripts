@@ -28,6 +28,10 @@ Docker wrapper for test environment
 
 Simple client for [gitignore.io](https://www.gitignore.io) and manage .gitignore
 
+### unzipj
+
+Simple tool for unpacking ZIP files with converting filename encoding
+
 ## License
 
 MIT
