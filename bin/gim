@@ -3,13 +3,13 @@
 import errno
 import os
 import os.path
+import re
 import sys
 from argparse import ArgumentParser
 from contextlib import closing
 from enum import Enum, auto
 from functools import reduce
 from itertools import tee, filterfalse, chain
-from re import compile, match
 from typing import Optional, Iterable, TypeVar, Callable, Tuple, List
 from urllib.request import urlopen
 
@@ -43,8 +43,8 @@ class Meta:
 
 
 class RE:
-    TEMPLATE_NAME = compile(fr'^{C.TEMPLATE_NAME_IDENTIFIER} (?P<name>.+) {C.TEMPLATE_NAME_IDENTIFIER}$')
-    INDEXED_ANONYMOUS_NAME = compile(fr'^{C.ANONYMOUS}[0-9]+$')
+    TEMPLATE_NAME = re.compile(fr'^{C.TEMPLATE_NAME_IDENTIFIER} (?P<name>.+) {C.TEMPLATE_NAME_IDENTIFIER}$')
+    INDEXED_ANONYMOUS_NAME = re.compile(fr'^{C.ANONYMOUS}[0-9]+$')
 
 
 class ParseError(BaseException):
@@ -169,7 +169,7 @@ class GitIgnore:
                 except IndexError:
                     raise LexError(line, 'Invalid template end token')
             elif s.startswith(C.TEMPLATE_NAME_IDENTIFIER):
-                m = match(RE.TEMPLATE_NAME, s)
+                m = re.match(RE.TEMPLATE_NAME, s)
                 if not m:
                     raise LexError(line, 'Invalid template name token')
                 try:
@@ -366,7 +366,7 @@ def do_remove(file: Optional[str], targets: List[str], dry_run: bool) -> None:
     def remove_index(entries: List[Entry]) -> List[Entry]:
         r = []
         for e in entries:
-            if match(RE.INDEXED_ANONYMOUS_NAME, e.name):
+            if re.match(RE.INDEXED_ANONYMOUS_NAME, e.name):
                 tmp = e
                 tmp.name = C.ANONYMOUS
                 r.append(tmp)
