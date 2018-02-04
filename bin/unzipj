@@ -1,24 +1,93 @@
 #!/usr/bin/env python3
 
+import os
 from argparse import ArgumentParser
-from typing import Optional
+from collections import UserList
+from typing import Optional, List
+from zipfile import ZipFile, ZipInfo
 
 
-def unzip(file: str, output_directory: Optional[str]) -> None:
-    print(file, output_directory)
+class C:
+    AVAILABLE_CODECS = ['cp932', 'shift_jis', 'utf_8', 'euc_jp']
+
+    # if this bit is set filename is encoded with UTF-8
+    # See https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT
+    # 4.4.4 general purpose bit flag
+    # or CPython's zipfile implementation
+    LANGUAGE_ENCODING_FLAG = (1 << 11)
+
+
+class AnsiColors:
+    RESET = '\033[0m'
+    RED = '\033[91m'
+
+
+def print_error(s: str, **kwargs) -> None:
+    print(f'{AnsiColors.RED}{s}{AnsiColors.RESET}', **kwargs)
+
+
+class CodecList(UserList):
+    def __init__(self, xs: List[str]) -> None:
+        super().__init__(xs)
+
+    @staticmethod
+    def normalize(s: str) -> str:
+        return s.translate(str.maketrans('-', '_')).lower()
+
+    def __contains__(self, item: str) -> bool:
+        normalized = CodecList.normalize(item)
+        return normalized in self.data
+
+
+def is_filename_utf_8_encoded(zip_info: ZipInfo) -> bool:
+    return zip_info.flag_bits & C.LANGUAGE_ENCODING_FLAG
+
+
+def do_unzip(file: str, encoding: str, output_directory: Optional[str]) -> None:
+    out_dir = os.getcwd() if not output_directory else output_directory
+    with ZipFile(file) as zip_file:
+        infolist_: List[ZipInfo] = zip_file.infolist()
+        print_utf_8_warning = False
+        for i in infolist_:
+            if not print_utf_8_warning and is_filename_utf_8_encoded(i):
+                print_error('warning: The language encoding flag is set so filename encoding is UTF-8.'
+                            ' We recommend use normal unzip utility to extract from this archive.')
+                print_utf_8_warning = True
+            if not is_filename_utf_8_encoded(i):
+                # See CPython's zipfile implementation
+                # filename is always decoded as 'cp437' except language encoding bit is set
+                binary_filename = i.filename.encode('cp437')
+                i.filename = binary_filename.decode(encoding)
+            zip_file.extract(i, path=out_dir)
+
+
+def do_list(file: str, encoding: str) -> None:
+    with ZipFile(file) as zip_file:
+        infolist_: List[ZipInfo] = zip_file.infolist()
+        for i in infolist_:
+            if not is_filename_utf_8_encoded(i):
+                binary_filename = i.filename.encode('cp437')
+                i.filename = binary_filename.decode(encoding)
+            print(i.filename)
 
 
 def build_parser() -> ArgumentParser:
     parser = ArgumentParser()
     parser.add_argument('file')
     parser.add_argument('-o', '--out', help='output directory', default=None)
+    parser.add_argument('-e', '--encoding', help='filename encoding', default='cp932',
+                        choices=CodecList(C.AVAILABLE_CODECS))
+    parser.add_argument('-l', '--list', help='print file list of archive', action='store_true')
     return parser
 
 
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
-    unzip(args.file, args.out)
+    if args.list:
+        do_list(args.file, args.encoding)
+    else:
+        do_unzip(args.file, args.encoding, args.out)
 
 
 if __name__ == '__main__':
