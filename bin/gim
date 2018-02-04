@@ -3,14 +3,16 @@
 import errno
 import os
 import os.path
+import pathlib
 import re
+import subprocess
 import sys
 from argparse import ArgumentParser
 from contextlib import closing
 from enum import Enum, auto
 from functools import reduce
 from itertools import tee, filterfalse, chain
-from typing import Optional, Iterable, TypeVar, Callable, Tuple, List
+from typing import Optional, Iterable, TypeVar, Callable, Tuple, List, Set
 from urllib.request import urlopen
 
 
@@ -142,9 +144,13 @@ class GitIgnore:
         self.templates = list(templates)
         self.user_defines = list(user_defines)
 
+    @staticmethod
+    def git_ignore_path(path: Optional[str]) -> str:
+        return path if path else os.path.join(os.getcwd(), C.GIT_IGNORE)
+
     @classmethod
     def from_file(cls, path: Optional[str]) -> 'GitIgnore':
-        path_ = path if path else os.path.join(os.getcwd(), C.GIT_IGNORE)
+        path_ = cls.git_ignore_path(path)
         with open(path_, 'r') as f:
             raw = f.read()
         r = cls(raw)
@@ -286,6 +292,16 @@ def write_git_ignore(path: str, gi: GitIgnore) -> None:
         f.write('\n')
 
 
+def run_for_output(command: List[str]) -> str:
+    completed = subprocess.run(command, stdout=subprocess.PIPE)
+    return completed.stdout.decode()
+
+
+def global_git_ignore_path() -> str:
+    config_value = run_for_output(['git', 'config', '--global', '--get', 'core.excludesFile']).strip()
+    return config_value if config_value else os.path.join(str(pathlib.Path().home()), '.config', 'git', 'ignore')
+
+
 def do_append(file: Optional[str], templates: List[str]) -> None:
     gi = GitIgnore.from_file(file)
     result = GitIgnore(get_templates(templates))
@@ -418,8 +434,8 @@ def do_update(file: Optional[str]) -> None:
     write_git_ignore(source.path, new)
 
 
-def do_doctor(file: Optional[str]) -> None:
-    def f(entries: List[Entry], is_template: bool) -> bool:
+def do_doctor(file: Optional[str], global_file: Optional[str]) -> None:
+    def check(entries: List[Entry], is_template: bool, global_entries: Set[str] = set()) -> bool:
         if is_template:
             print('templates:')
         else:
@@ -428,6 +444,7 @@ def do_doctor(file: Optional[str]) -> None:
         s = {}
         for entry in entries:
             if entry.name in s and s[entry.name]:
+                # to avoid warn same entry, track printed warning information in dict
                 s[entry.name] = False
                 r = False
                 if entry.name == C.ANONYMOUS:
@@ -439,22 +456,52 @@ def do_doctor(file: Optional[str]) -> None:
                             f"warning: template {entry.name} was duplicated (use 'gim {C.UPDATE}' to merge them)")
                     else:
                         print_error(f'warning: template {entry.name} was duplicated (merge them manually)')
+            elif entry.name in global_entries:
+                r = False
+                if is_template:
+                    print_error(
+                        f"warning: template {entry.name} has already included in global gitignore"
+                        f" (use 'gim {C.REMOVE} {entry.name}' to remove them)")
+                else:
+                    print_error(
+                        f'warning: template {entry.name} has already included in global gitignore (merge them manually)')
             else:
                 s[entry.name] = True
         if r:
             print('ok')
         return r
 
+    result_list = []
+    try:
+        global_path = global_file if global_file else global_git_ignore_path()
+        print(f'check global gitignore {global_path}:')
+        global_ = GitIgnore.from_file(global_path)
+    except (ParseError, LexError) as e:
+        print_error(f"error: line: {e.line} {type(e).__name__} {e.message}")
+        sys.exit(1)
+    except (FileNotFoundError, IsADirectoryError):
+        print('there is no global gitignore')
+        global_ = GitIgnore()
+    else:
+        r1 = check(global_.templates, True)
+        result_list.append(r1)
+        r2 = check(global_.user_defines, False)
+        result_list.append(r2)
+
+    print()
+    print(f'check local gitignore {GitIgnore.git_ignore_path(file)}:')
     try:
         source = GitIgnore.from_file(file)
     except (ParseError, LexError) as e:
         print_error(f"error: line: {e.line} {type(e).__name__} {e.message}")
         sys.exit(1)
-    else:
-        r1 = f(source.templates, True)
-        r2 = f(source.user_defines, False)
-        if not r1 or not r2:
-            sys.exit(1)
+
+    r1 = check(source.templates, True, {i.name for i in global_.templates})
+    result_list.append(r1)
+    r2 = check(source.user_defines, False, {i.name for i in global_.user_defines})
+    result_list.append(r2)
+    if not reduce(lambda x, y: x and y, result_list):
+        sys.exit(1)
 
 
 def build_parser() -> ArgumentParser:
@@ -507,7 +554,8 @@ def build_parser() -> ArgumentParser:
         def setup_doctor_parser(ps) -> None:
             p = ps.add_parser(C.DOCTOR, help=f'check {C.GIT_IGNORE}')
             p.add_argument('-i', '--input-file', default=None)
-            p.set_defaults(func=lambda a: do_doctor(a.input_file))
+            p.add_argument('-g', '--input-file-global', default=None)
+            p.set_defaults(func=lambda a: do_doctor(a.input_file, a.input_file_global))
 
         setup_list_parser(scp)
         setup_list_templates_parser(scp)
