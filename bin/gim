@@ -457,7 +457,7 @@ def do_doctor(file: Optional[str]) -> None:
             sys.exit(1)
 
 
-def main() -> None:
+def build_parser() -> ArgumentParser:
     def setup_sub_commands_parser(scp) -> None:
         def setup_list_parser(ps) -> None:
             p = ps.add_parser(C.LIST, help=f'print list of entries in {C.GIT_IGNORE}')
@@ -523,6 +523,11 @@ def main() -> None:
     subparsers = parser.add_subparsers(dest='command')
     subparsers.required = True
     setup_sub_commands_parser(subparsers)
+    return parser
+
+
+def main() -> None:
+    parser = build_parser()
     args = parser.parse_args()
     args.func(args)
 
