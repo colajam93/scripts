@@ -11,7 +11,7 @@ from zipfile import ZipFile, ZipInfo
 
 
 class C:
-    AVAILABLE_CODECS = ['cp932', 'shift_jis', 'utf_8', 'euc_jp']
+    AVAILABLE_CODECS = ['cp932', 'shift_jis', 'utf_8', 'euc_jp', 'eucjp', 'shiftjis', 'sjis', 'utf8']
 
     # if this bit is set filename is encoded with UTF-8
     # See https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT
