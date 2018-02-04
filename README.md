@@ -26,7 +26,7 @@ Docker wrapper for test environment
 
 ### gim
 
-Simple client for gitignore.io and manage .gitignore
+Simple client for [gitignore.io](https://www.gitignore.io) and manage .gitignore
 
 ## License
 
