@@ -2,6 +2,7 @@
 
 import json
 import os
+import pathlib
 import shutil
 import subprocess
 from argparse import ArgumentParser
@@ -42,15 +43,11 @@ def do_getpkgbuild(packages: List[str], directory: str) -> None:
                 subprocess.run(['tar', 'xvf', t.name, '-C', temp_dir],
                                stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
 
-        def listdir_only_directory(path: str) -> List[str]:
-            def absolute_path(p: str) -> str:
-                return os.path.join(path, p)
-
-            return list(absolute_path(x) for x in os.listdir(path) if os.path.isdir(absolute_path(x)))
-
         output_directory = directory if directory else os.getcwd()
-        for d in listdir_only_directory(temp_dir):
-            destination = shutil.move(d, output_directory)
+        path = pathlib.Path(temp_dir)
+        gen = (x for x in path.iterdir() if x.is_dir())
+        for d in gen:
+            destination = shutil.move(str(d), output_directory)
             print(f'Saved to {destination}')
 
 
