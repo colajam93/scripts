@@ -132,17 +132,17 @@ def do_getpkgbuild(packages: typing.List[str], directory: str) -> None:
             print(f'Saved to {destination}')
 
 
-def do_sync_search(packages: typing.List[str]) -> None:
-    query_result = send_query(search_url(' '.join(packages)))
+def do_sync_search(package: str) -> None:
+    query_result = send_query(search_url(package))
     for info in query_result.results:
         print(f'aur/{info.name} {info.version}')
         print(f'    {info.description}')
 
 
-def do_sync_info(packages: typing.List[str]) -> None:
-    query_result = send_query(info_url(packages[:1]))
+def do_sync_info(package: str) -> None:
+    query_result = send_query(info_url([package]))
     if query_result.result_count == 0:
-        print(f'Package {packages[0]} not found')
+        print(f'Package "{package}" not found')
     else:
         def output(key: str, value: str) -> None:
             print(f'{key:16}: {value}')
@@ -162,19 +162,18 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument('--sync', '-S', action='store_true')
-    group.add_argument('--getpkgbuild', '-G', action='store_true')
-    parser.add_argument('package', nargs='+')
+    group.add_argument('--getpkgbuild', '-G', nargs='+')
     parser.add_argument('--directory', '-d', default='')
-    parser.add_argument('--search', '-s', action='store_true')
-    parser.add_argument('--info', '-i', action='store_true')
+    parser.add_argument('--search', '-s')
+    parser.add_argument('--info', '-i')
     args = parser.parse_args()
 
     if args.sync and args.search:
-        do_sync_search(args.package)
+        do_sync_search(args.search)
     elif args.sync and args.info:
-        do_sync_info(args.package)
+        do_sync_info(args.info)
     elif args.getpkgbuild:
-        do_getpkgbuild(args.package, args.directory)
+        do_getpkgbuild(args.getpkgbuild, args.directory)
 
 
 if __name__ == '__main__':
