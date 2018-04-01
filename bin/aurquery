@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 
+import contextlib
 import json
 import os
 import pathlib
 import shutil
 import subprocess
 import typing
+import urllib.request
 from argparse import ArgumentParser
-from contextlib import closing
 from tempfile import TemporaryDirectory, NamedTemporaryFile
 from typing import List
 from urllib.parse import quote
-from urllib.request import urlopen
 
-OFFICIAL_AUR_URL = 'https://aur.archlinux.org'
+OFFICIAL_AUR_URL = 'https://aur.archlinux.org/{}'
 
 JSONType = typing.Union[str, int, float, bool, None, typing.Mapping[str, typing.Any], typing.List[typing.Any]]
 
@@ -33,6 +33,10 @@ class AURInfo(typing.NamedTuple):
     first_submitted: int
     last_modified: int
     url_path: str
+
+    @property
+    def full_url_path(self) -> str:
+        return OFFICIAL_AUR_URL.format(self.url_path)
 
     @staticmethod
     def from_json(data: JSONType) -> 'AURInfo':
@@ -56,33 +60,60 @@ class AURInfo(typing.NamedTuple):
         return AURInfo(**{k: data[v] for k, v in name_mapping.items()})
 
 
+class AURQuery(typing.NamedTuple):
+    version: int
+    type: str
+    result_count: int
+    results: typing.List[AURInfo]
+
+    @staticmethod
+    def from_json(data: JSONType) -> 'AURQuery':
+        converted = {
+            'version': data['version'],
+            'type': data['type'],
+            'result_count': data['resultcount'],
+            'results': list(map(AURInfo.from_json, data['results']))
+        }
+
+        return AURQuery(**converted)
+
+
 def info_url(packages: List[str], server: str = OFFICIAL_AUR_URL) -> str:
-    return server + '/rpc/?v=5&type=info&' + '&'.join(['arg[]={}'.format(quote(x)) for x in packages])
+    return server.format('/rpc/?v=5&type=info&' + '&'.join(['arg[]={}'.format(quote(x)) for x in packages]))
 
 
 def search_url(package: str, server: str = OFFICIAL_AUR_URL) -> str:
-    return server + '/rpc/?v=5&type=search&arg={}'.format(quote(package))
+    return server.format('/rpc/?v=5&type=search&arg={}'.format(quote(package)))
 
 
-def query(url: str):
-    with closing(urlopen(url)) as request:
-        return json.loads(request.read().decode())
+def send_query(url: str) -> AURQuery:
+    with contextlib.closing(urllib.request.urlopen(url)) as request:
+        raw = json.loads(request.read().decode())
+        return AURQuery.from_json(raw)
+
+
+def download(url: str, file: typing.BinaryIO) -> None:
+    with contextlib.closing(urllib.request.urlopen(url)) as request:
+        file.write(request.read())
+        file.flush()
+
+
+def tar_extract(path: str, output_dir: str) -> None:
+    subprocess.run(['tar', 'xvf', path, '-C', output_dir],
+                   stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
 
 
 def do_getpkgbuild(packages: List[str], directory: str) -> None:
-    query_result = query(info_url(packages))
-    if query_result['resultcount'] != len(packages):
-        missing = set(packages) - {i['Name'] for i in query_result['results']}
+    query_result = send_query(info_url(packages))
+    if query_result.result_count != len(packages):
+        missing = set(packages) - {i.name for i in query_result.results}
         converted = (f'"{i}"' for i in missing)
         print(f'{", ".join(converted)} not found')
     with TemporaryDirectory() as temp_dir:
-        for package in query_result['results']:
+        for package in query_result.results:
             with NamedTemporaryFile(dir=temp_dir) as t:
-                with closing(urlopen(OFFICIAL_AUR_URL + package['URLPath'])) as request:
-                    t.write(request.read())
-                    t.flush()
-                subprocess.run(['tar', 'xvf', t.name, '-C', temp_dir],
-                               stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+                download(package.full_url_path, t)
+                tar_extract(t.name, temp_dir)
 
         output_directory = directory if directory else os.getcwd()
         path = pathlib.Path(temp_dir)
@@ -93,9 +124,8 @@ def do_getpkgbuild(packages: List[str], directory: str) -> None:
 
 
 def do_sync_search(packages: List[str]) -> None:
-    query_result = query(search_url(' '.join(packages)))
-    for i in query_result['results']:
-        info = AURInfo.from_json(i)
+    query_result = send_query(search_url(' '.join(packages)))
+    for info in query_result.results:
         print(f'aur/{info.name} {info.version}')
         print(f'    {info.description}')
 
