@@ -5,6 +5,7 @@ import os
 import pathlib
 import shutil
 import subprocess
+import typing
 from argparse import ArgumentParser
 from contextlib import closing
 from tempfile import TemporaryDirectory, NamedTemporaryFile
@@ -13,6 +14,46 @@ from urllib.parse import quote
 from urllib.request import urlopen
 
 OFFICIAL_AUR_URL = 'https://aur.archlinux.org'
+
+JSONType = typing.Union[str, int, float, bool, None, typing.Mapping[str, typing.Any], typing.List[typing.Any]]
+
+
+class AURInfo(typing.NamedTuple):
+    id: int
+    name: str
+    package_base_id: int
+    package_base: str
+    version: str
+    description: str
+    url: str
+    num_votes: int
+    popularity: float
+    out_of_date: int
+    maintainer: str
+    first_submitted: int
+    last_modified: int
+    url_path: str
+
+    @staticmethod
+    def from_json(data: JSONType) -> 'AURInfo':
+        name_mapping = {
+            'id': 'ID',
+            'name': 'Name',
+            'package_base_id': 'PackageBaseID',
+            'package_base': 'PackageBase',
+            'version': 'Version',
+            'description': 'Description',
+            'url': 'URL',
+            'num_votes': 'NumVotes',
+            'popularity': 'Popularity',
+            'out_of_date': 'OutOfDate',
+            'maintainer': 'Maintainer',
+            'first_submitted': 'FirstSubmitted',
+            'last_modified': 'LastModified',
+            'url_path': 'URLPath'
+        }
+
+        return AURInfo(**{k: data[v] for k, v in name_mapping.items()})
 
 
 def info_url(packages: List[str], server: str = OFFICIAL_AUR_URL) -> str:
@@ -52,11 +93,11 @@ def do_getpkgbuild(packages: List[str], directory: str) -> None:
 
 
 def do_sync_search(packages: List[str]) -> None:
-    # TODO: Pretty output
-    # TODO: concurrent query
-    query_results = (query(search_url(package)) for package in packages)
-    for r in query_results:
-        print(json.dumps(r, indent=4))
+    query_result = query(search_url(' '.join(packages)))
+    for i in query_result['results']:
+        info = AURInfo.from_json(i)
+        print(f'aur/{info.name} {info.version}')
+        print(f'    {info.description}')
 
 
 def main() -> None:
