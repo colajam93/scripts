@@ -2,7 +2,6 @@
 
 import json
 import os
-import os.path
 import shutil
 import subprocess
 from argparse import ArgumentParser
@@ -30,9 +29,10 @@ def query(url: str):
 
 def do_getpkgbuild(packages: List[str], directory: str) -> None:
     query_result = query(info_url(packages))
-    if query_result['resultcount'] == 0:
-        # TODO: Error message
-        return
+    if query_result['resultcount'] != len(packages):
+        missing = set(packages) - {i['Name'] for i in query_result['results']}
+        converted = [f'"{i}"' for i in missing]
+        print(f'{", ".join(converted)} not found')
     with TemporaryDirectory() as temp_dir:
         for package in query_result['results']:
             with NamedTemporaryFile(dir=temp_dir) as t:
@@ -49,9 +49,9 @@ def do_getpkgbuild(packages: List[str], directory: str) -> None:
             return list(absolute_path(x) for x in os.listdir(path) if os.path.isdir(absolute_path(x)))
 
         output_directory = directory if directory else os.getcwd()
-        # TODO: Overwrite handling
         for d in listdir_only_directory(temp_dir):
-            shutil.move(d, output_directory)
+            destination = shutil.move(d, output_directory)
+            print(f'Saved to {destination}')
 
 
 def do_sync_search(packages: List[str]) -> None:
