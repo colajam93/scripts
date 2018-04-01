@@ -32,7 +32,7 @@ def do_getpkgbuild(packages: List[str], directory: str) -> None:
     query_result = query(info_url(packages))
     if query_result['resultcount'] != len(packages):
         missing = set(packages) - {i['Name'] for i in query_result['results']}
-        converted = [f'"{i}"' for i in missing]
+        converted = (f'"{i}"' for i in missing)
         print(f'{", ".join(converted)} not found')
     with TemporaryDirectory() as temp_dir:
         for package in query_result['results']:
@@ -54,7 +54,7 @@ def do_getpkgbuild(packages: List[str], directory: str) -> None:
 def do_sync_search(packages: List[str]) -> None:
     # TODO: Pretty output
     # TODO: concurrent query
-    query_results = [query(search_url(package)) for package in packages]
+    query_results = (query(search_url(package)) for package in packages)
     for r in query_results:
         print(json.dumps(r, indent=4))
 
