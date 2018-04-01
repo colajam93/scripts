@@ -2,6 +2,7 @@
 
 import argparse
 import contextlib
+import datetime
 import json
 import os
 import pathlib
@@ -12,7 +13,7 @@ import typing
 import urllib.parse
 import urllib.request
 
-OFFICIAL_AUR_URL = 'https://aur.archlinux.org/{}'
+OFFICIAL_AUR_URL = 'https://aur.archlinux.org{}'
 
 JSONType = typing.Union[str, int, float, bool, None, typing.Mapping[str, typing.Any], typing.List[typing.Any]]
 
@@ -32,6 +33,31 @@ class AURInfo(typing.NamedTuple):
     first_submitted: int
     last_modified: int
     url_path: str
+    depends: typing.List[str]
+    make_depends: typing.List[str]
+    license: typing.List[str]
+    keywords: typing.List[str]
+
+    NAME_MAPPING = {
+        'id': 'ID',
+        'name': 'Name',
+        'package_base_id': 'PackageBaseID',
+        'package_base': 'PackageBase',
+        'version': 'Version',
+        'description': 'Description',
+        'url': 'URL',
+        'num_votes': 'NumVotes',
+        'popularity': 'Popularity',
+        'out_of_date': 'OutOfDate',
+        'maintainer': 'Maintainer',
+        'first_submitted': 'FirstSubmitted',
+        'last_modified': 'LastModified',
+        'url_path': 'URLPath',
+        'depends': 'Depends',
+        'make_depends': 'MakeDepends',
+        'license': 'License',
+        'keywords': 'Keywords'
+    }
 
     @property
     def full_url_path(self) -> str:
@@ -39,24 +65,7 @@ class AURInfo(typing.NamedTuple):
 
     @staticmethod
     def from_json(data: JSONType) -> 'AURInfo':
-        name_mapping = {
-            'id': 'ID',
-            'name': 'Name',
-            'package_base_id': 'PackageBaseID',
-            'package_base': 'PackageBase',
-            'version': 'Version',
-            'description': 'Description',
-            'url': 'URL',
-            'num_votes': 'NumVotes',
-            'popularity': 'Popularity',
-            'out_of_date': 'OutOfDate',
-            'maintainer': 'Maintainer',
-            'first_submitted': 'FirstSubmitted',
-            'last_modified': 'LastModified',
-            'url_path': 'URLPath'
-        }
-
-        return AURInfo(**{k: data[v] for k, v in name_mapping.items()})
+        return AURInfo(**{k: data.get(v, None) for k, v in AURInfo.NAME_MAPPING.items()})
 
 
 class AURQuery(typing.NamedTuple):
@@ -130,6 +139,25 @@ def do_sync_search(packages: typing.List[str]) -> None:
         print(f'    {info.description}')
 
 
+def do_sync_info(packages: typing.List[str]) -> None:
+    query_result = send_query(info_url(packages[:1]))
+    if query_result.result_count == 0:
+        print(f'Package {packages[0]} not found')
+    else:
+        def output(key: str, value: str) -> None:
+            print(f'{key:16}: {value}')
+
+        result = query_result.results[0]
+
+        for k, v in AURInfo.NAME_MAPPING.items():
+            if k == 'url_path':
+                output(v, urllib.parse.unquote(result.full_url_path))
+            elif k == 'first_submitted' or k == 'last_modified':
+                output(v, datetime.datetime.fromtimestamp(getattr(result, k)).isoformat(' '))
+            else:
+                output(v, getattr(result, k))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     group = parser.add_mutually_exclusive_group(required=True)
@@ -138,10 +166,13 @@ def main() -> None:
     parser.add_argument('package', nargs='+')
     parser.add_argument('--directory', '-d', default='')
     parser.add_argument('--search', '-s', action='store_true')
+    parser.add_argument('--info', '-i', action='store_true')
     args = parser.parse_args()
 
     if args.sync and args.search:
         do_sync_search(args.package)
+    elif args.sync and args.info:
+        do_sync_info(args.package)
     elif args.getpkgbuild:
         do_getpkgbuild(args.package, args.directory)
 
