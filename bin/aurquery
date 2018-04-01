@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
 
+import argparse
 import contextlib
 import json
 import os
 import pathlib
 import shutil
 import subprocess
+import tempfile
 import typing
+import urllib.parse
 import urllib.request
-from argparse import ArgumentParser
-from tempfile import TemporaryDirectory, NamedTemporaryFile
-from typing import List
-from urllib.parse import quote
 
 OFFICIAL_AUR_URL = 'https://aur.archlinux.org/{}'
 
@@ -78,12 +77,13 @@ class AURQuery(typing.NamedTuple):
         return AURQuery(**converted)
 
 
-def info_url(packages: List[str], server: str = OFFICIAL_AUR_URL) -> str:
-    return server.format('/rpc/?v=5&type=info&' + '&'.join(['arg[]={}'.format(quote(x)) for x in packages]))
+def info_url(packages: typing.List[str], server: str = OFFICIAL_AUR_URL) -> str:
+    package_names = (f'arg[]={urllib.parse.quote(x)}' for x in packages)
+    return server.format(f"/rpc/?v=5&type=info&{'&'.join(package_names)}")
 
 
 def search_url(package: str, server: str = OFFICIAL_AUR_URL) -> str:
-    return server.format('/rpc/?v=5&type=search&arg={}'.format(quote(package)))
+    return server.format(f'/rpc/?v=5&type=search&arg={urllib.parse.quote(package)}')
 
 
 def send_query(url: str) -> AURQuery:
@@ -98,22 +98,22 @@ def download(url: str, file: typing.BinaryIO) -> None:
         file.flush()
 
 
-def tar_extract(path: str, output_dir: str) -> None:
+def extract_tar(path: str, output_dir: str) -> None:
     subprocess.run(['tar', 'xvf', path, '-C', output_dir],
                    stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
 
 
-def do_getpkgbuild(packages: List[str], directory: str) -> None:
+def do_getpkgbuild(packages: typing.List[str], directory: str) -> None:
     query_result = send_query(info_url(packages))
     if query_result.result_count != len(packages):
         missing = set(packages) - {i.name for i in query_result.results}
         converted = (f'"{i}"' for i in missing)
         print(f'{", ".join(converted)} not found')
-    with TemporaryDirectory() as temp_dir:
+    with tempfile.TemporaryDirectory() as temp_dir:
         for package in query_result.results:
-            with NamedTemporaryFile(dir=temp_dir) as t:
+            with tempfile.NamedTemporaryFile(dir=temp_dir) as t:
                 download(package.full_url_path, t)
-                tar_extract(t.name, temp_dir)
+                extract_tar(t.name, temp_dir)
 
         output_directory = directory if directory else os.getcwd()
         path = pathlib.Path(temp_dir)
@@ -123,7 +123,7 @@ def do_getpkgbuild(packages: List[str], directory: str) -> None:
             print(f'Saved to {destination}')
 
 
-def do_sync_search(packages: List[str]) -> None:
+def do_sync_search(packages: typing.List[str]) -> None:
     query_result = send_query(search_url(' '.join(packages)))
     for info in query_result.results:
         print(f'aur/{info.name} {info.version}')
@@ -131,7 +131,7 @@ def do_sync_search(packages: List[str]) -> None:
 
 
 def main() -> None:
-    parser = ArgumentParser()
+    parser = argparse.ArgumentParser()
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument('--sync', '-S', action='store_true')
     group.add_argument('--getpkgbuild', '-G', action='store_true')
