@@ -18,7 +18,7 @@ from urllib.request import urlopen
 APPEND: str = 'append'
 ANONYMOUS: str = 'Anonymous'
 CLEAN: str = 'clean'
-COMMENT_IDENTIFIER: str = '#'
+COMMENT_TOKEN: str = '#'
 DOCTOR: str = 'doctor'
 GET: str = 'get'
 GIT_IGNORE: str = '.gitignore'
@@ -26,9 +26,9 @@ GIT_IGNORE_IO_URL_TEMPLATE: str = 'https://www.gitignore.io/api/{}'
 INIT: str = 'init'
 LIST: str = 'list'
 LIST_TEMPLATES: str = 'list-templates'
-TEMPLATE_BEGIN_IDENTIFIER: str = '# Created by'
-TEMPLATE_END_IDENTIFIER: str = '# End of'
-TEMPLATE_NAME_IDENTIFIER: str = '###'
+TEMPLATE_BEGIN_TOKEN: str = '# Created by'
+TEMPLATE_END_TOKEN: str = '# End of'
+TEMPLATE_NAME_TOKEN: str = '###'
 REMOVE: str = 'remove'
 UPDATE: str = 'update'
 
@@ -44,7 +44,7 @@ class Meta:
 
 class RE:
     TEMPLATE_NAME: typing.Pattern = re.compile(
-        fr'^{TEMPLATE_NAME_IDENTIFIER} (?P<name>.+) {TEMPLATE_NAME_IDENTIFIER}$')
+        fr'^{TEMPLATE_NAME_TOKEN} (?P<name>.+) {TEMPLATE_NAME_TOKEN}$')
     INDEXED_ANONYMOUS_NAME: typing.Pattern = re.compile(fr'^{ANONYMOUS}[0-9]+$')
 
 
@@ -105,7 +105,7 @@ class Entry:
             return f'{begin}-{end}'
 
     def raw_str(self) -> str:
-        name = [f'{TEMPLATE_NAME_IDENTIFIER} {self.name} {TEMPLATE_NAME_IDENTIFIER}']
+        name = [f'{TEMPLATE_NAME_TOKEN} {self.name} {TEMPLATE_NAME_TOKEN}']
 
         if len(self.values) < 2:
             return '\n'.join(chain(name, map(lambda x: x.raw_str(), self.values)))
@@ -162,19 +162,19 @@ class GitIgnore:
         def lex(line: int, s: str) -> typing.Optional[Token]:
             if s == '':
                 return None
-            elif s.startswith(TEMPLATE_BEGIN_IDENTIFIER):
+            elif s.startswith(TEMPLATE_BEGIN_TOKEN):
                 try:
-                    name = ''.join(s.split(TEMPLATE_BEGIN_IDENTIFIER)[1:]).strip()
+                    name = ''.join(s.split(TEMPLATE_BEGIN_TOKEN)[1:]).strip()
                     return Token(TokenType.TEMPLATE_BEGIN, name, line)
                 except IndexError:
                     raise LexError(line, 'Invalid template begin token')
-            elif s.startswith(TEMPLATE_END_IDENTIFIER):
+            elif s.startswith(TEMPLATE_END_TOKEN):
                 try:
-                    name = ''.join(s.split(TEMPLATE_END_IDENTIFIER)[1:]).strip()
+                    name = ''.join(s.split(TEMPLATE_END_TOKEN)[1:]).strip()
                     return Token(TokenType.TEMPLATE_END, name, line)
                 except IndexError:
                     raise LexError(line, 'Invalid template end token')
-            elif s.startswith(TEMPLATE_NAME_IDENTIFIER):
+            elif s.startswith(TEMPLATE_NAME_TOKEN):
                 m = re.match(RE.TEMPLATE_NAME, s)
                 if not m:
                     raise LexError(line, 'Invalid template name token')
@@ -183,7 +183,7 @@ class GitIgnore:
                 except IndexError as e:
                     raise LexError from e
                 return Token(TokenType.TEMPLATE_NAME, name, line)
-            elif s.startswith(COMMENT_IDENTIFIER):
+            elif s.startswith(COMMENT_TOKEN):
                 return Token(TokenType.COMMENT, s, line)
             else:
                 return Token(TokenType.PATTERN, s, line)
@@ -241,8 +241,8 @@ class GitIgnore:
         # if there is no templates then suppress the template identifier line
         if self.templates:
             url = f'gim (This {GIT_IGNORE} is managed by gim)'
-            prologue = [f'{TEMPLATE_BEGIN_IDENTIFIER} {url}']
-            epilogue = [f'{TEMPLATE_END_IDENTIFIER} {url}']
+            prologue = [f'{TEMPLATE_BEGIN_TOKEN} {url}']
+            epilogue = [f'{TEMPLATE_END_TOKEN} {url}']
             return '\n\n'.join(chain(prologue, f(self.templates), epilogue, f(self.user_defines)))
         else:
             return '\n\n'.join(f(self.user_defines))
