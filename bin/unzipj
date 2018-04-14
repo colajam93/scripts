@@ -3,23 +3,23 @@
 import os
 import pathlib
 import shutil
+import typing
 from argparse import ArgumentParser
 from tempfile import TemporaryDirectory
-from typing import Optional, List
 from zipfile import ZipFile, ZipInfo
 
-AVAILABLE_CODECS = ['cp932', 'shift_jis', 'utf_8', 'euc_jp', 'eucjp', 'shiftjis', 'sjis', 'utf8']
+AVAILABLE_CODECS: typing.List[str] = ['cp932', 'shift_jis', 'utf_8', 'euc_jp', 'eucjp', 'shiftjis', 'sjis', 'utf8']
 
 # if this bit is set filename is encoded with UTF-8
 # See https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT
 # 4.4.4 general purpose bit flag
 # or CPython's zipfile implementation
-LANGUAGE_ENCODING_FLAG = (1 << 11)
+LANGUAGE_ENCODING_FLAG: int = (1 << 11)
 
 
 class AnsiColors:
-    RESET = '\033[0m'
-    RED = '\033[91m'
+    RESET: str = '\033[0m'
+    RED: str = '\033[91m'
 
 
 def print_error(s: str, **kwargs) -> None:
@@ -27,7 +27,7 @@ def print_error(s: str, **kwargs) -> None:
 
 
 class CodecList(list):
-    def __init__(self, xs: List[str]) -> None:
+    def __init__(self, xs: typing.List[str]) -> None:
         super().__init__(xs)
 
     @staticmethod
@@ -43,7 +43,29 @@ def is_filename_utf_8_encoded(zip_info: ZipInfo) -> bool:
     return zip_info.flag_bits & LANGUAGE_ENCODING_FLAG
 
 
-def do_unzip(file: str, encoding: str, output_directory: Optional[str]) -> None:
+def unzip(working_dir: str, zip_file: ZipFile, out_dir_path: pathlib.Path, encoding: str) -> None:
+    infolist_: typing.List[ZipInfo] = zip_file.infolist()
+    print_utf_8_warning = False
+    for i in infolist_:
+        if not print_utf_8_warning and is_filename_utf_8_encoded(i):
+            print_error('warning: The language encoding flag is set so filename encoding is UTF-8.'
+                        ' We recommend use normal unzip utility to extract from this archive.')
+            print_utf_8_warning = True
+        if not is_filename_utf_8_encoded(i):
+            # See CPython's zipfile implementation
+            # filename is always decoded as 'cp437' except language encoding bit is set
+            binary_filename = i.filename.encode('cp437')
+            i.filename = binary_filename.decode(encoding)
+        print(f'unzipping {i.filename}')
+        extracted_path = zip_file.extract(i, path=working_dir)
+        destination_path = out_dir_path.absolute() / i.filename
+        if destination_path.exists():
+            print_error(f"'{destination_path}' is already exists. skipping...")
+        else:
+            shutil.move(extracted_path, str(destination_path))
+
+
+def do_unzip(file: str, encoding: str, output_directory: typing.Optional[str]) -> None:
     out_dir_path = pathlib.Path(os.getcwd() if not output_directory else output_directory)
     if out_dir_path.exists():
         if not out_dir_path.is_dir():
@@ -52,30 +74,12 @@ def do_unzip(file: str, encoding: str, output_directory: Optional[str]) -> None:
         out_dir_path.mkdir()
     with TemporaryDirectory() as temp_dir_path:
         with ZipFile(file) as zip_file:
-            infolist_: List[ZipInfo] = zip_file.infolist()
-            print_utf_8_warning = False
-            for i in infolist_:
-                if not print_utf_8_warning and is_filename_utf_8_encoded(i):
-                    print_error('warning: The language encoding flag is set so filename encoding is UTF-8.'
-                                ' We recommend use normal unzip utility to extract from this archive.')
-                    print_utf_8_warning = True
-                if not is_filename_utf_8_encoded(i):
-                    # See CPython's zipfile implementation
-                    # filename is always decoded as 'cp437' except language encoding bit is set
-                    binary_filename = i.filename.encode('cp437')
-                    i.filename = binary_filename.decode(encoding)
-                print(f'unzipping {i.filename}')
-                extracted_path = zip_file.extract(i, path=temp_dir_path)
-                destination_path = out_dir_path.absolute() / i.filename
-                if destination_path.exists():
-                    print_error(f"'{destination_path}' is already exists. skipping...")
-                else:
-                    shutil.move(extracted_path, str(destination_path))
+            unzip(temp_dir_path, zip_file, out_dir_path, encoding)
 
 
 def do_list(file: str, encoding: str) -> None:
     with ZipFile(file) as zip_file:
-        infolist_: List[ZipInfo] = zip_file.infolist()
+        infolist_: typing.List[ZipInfo] = zip_file.infolist()
         for i in infolist_:
             if not is_filename_utf_8_encoded(i):
                 binary_filename = i.filename.encode('cp437')
