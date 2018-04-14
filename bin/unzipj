@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import os
-import os.path
+import pathlib
 import shutil
 from argparse import ArgumentParser
 from tempfile import TemporaryDirectory
@@ -44,11 +44,12 @@ def is_filename_utf_8_encoded(zip_info: ZipInfo) -> bool:
 
 
 def do_unzip(file: str, encoding: str, output_directory: Optional[str]) -> None:
-    out_dir = os.getcwd() if not output_directory else output_directory
-    if os.path.isfile(out_dir):
-        raise FileExistsError
-    elif not os.path.isdir(out_dir):
-        os.mkdir(out_dir)
+    out_dir_path = pathlib.Path(os.getcwd() if not output_directory else output_directory)
+    if out_dir_path.exists():
+        if not out_dir_path.is_dir():
+            raise FileExistsError
+    else:
+        out_dir_path.mkdir()
     with TemporaryDirectory() as temp_dir_path:
         with ZipFile(file) as zip_file:
             infolist_: List[ZipInfo] = zip_file.infolist()
@@ -63,10 +64,13 @@ def do_unzip(file: str, encoding: str, output_directory: Optional[str]) -> None:
                     # filename is always decoded as 'cp437' except language encoding bit is set
                     binary_filename = i.filename.encode('cp437')
                     i.filename = binary_filename.decode(encoding)
-                zip_file.extract(i, path=temp_dir_path)
-        for i in os.listdir(temp_dir_path):
-            absolute_path = os.path.join(temp_dir_path, i)
-            shutil.move(absolute_path, out_dir)
+                print(f'unzipping {i.filename}')
+                extracted_path = zip_file.extract(i, path=temp_dir_path)
+                destination_path = out_dir_path.absolute() / i.filename
+                if destination_path.exists():
+                    print_error(f"'{destination_path}' is already exists. skipping...")
+                else:
+                    shutil.move(extracted_path, str(destination_path))
 
 
 def do_list(file: str, encoding: str) -> None:
