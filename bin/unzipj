@@ -4,20 +4,17 @@ import os
 import os.path
 import shutil
 from argparse import ArgumentParser
-from collections import UserList
 from tempfile import TemporaryDirectory
 from typing import Optional, List
 from zipfile import ZipFile, ZipInfo
 
+AVAILABLE_CODECS = ['cp932', 'shift_jis', 'utf_8', 'euc_jp', 'eucjp', 'shiftjis', 'sjis', 'utf8']
 
-class C:
-    AVAILABLE_CODECS = ['cp932', 'shift_jis', 'utf_8', 'euc_jp', 'eucjp', 'shiftjis', 'sjis', 'utf8']
-
-    # if this bit is set filename is encoded with UTF-8
-    # See https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT
-    # 4.4.4 general purpose bit flag
-    # or CPython's zipfile implementation
-    LANGUAGE_ENCODING_FLAG = (1 << 11)
+# if this bit is set filename is encoded with UTF-8
+# See https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT
+# 4.4.4 general purpose bit flag
+# or CPython's zipfile implementation
+LANGUAGE_ENCODING_FLAG = (1 << 11)
 
 
 class AnsiColors:
@@ -29,7 +26,7 @@ def print_error(s: str, **kwargs) -> None:
     print(f'{AnsiColors.RED}{s}{AnsiColors.RESET}', **kwargs)
 
 
-class CodecList(UserList):
+class CodecList(list):
     def __init__(self, xs: List[str]) -> None:
         super().__init__(xs)
 
@@ -39,11 +36,11 @@ class CodecList(UserList):
 
     def __contains__(self, item: str) -> bool:
         normalized = CodecList.normalize(item)
-        return normalized in self.data
+        return super().__contains__(normalized)
 
 
 def is_filename_utf_8_encoded(zip_info: ZipInfo) -> bool:
-    return zip_info.flag_bits & C.LANGUAGE_ENCODING_FLAG
+    return zip_info.flag_bits & LANGUAGE_ENCODING_FLAG
 
 
 def do_unzip(file: str, encoding: str, output_directory: Optional[str]) -> None:
@@ -87,7 +84,7 @@ def build_parser() -> ArgumentParser:
     parser.add_argument('file')
     parser.add_argument('-o', '--out', help='output directory', default=None)
     parser.add_argument('-e', '--encoding', help='filename encoding', default='cp932',
-                        choices=CodecList(C.AVAILABLE_CODECS))
+                        choices=CodecList(AVAILABLE_CODECS))
     parser.add_argument('-l', '--list', help='print file list of archive', action='store_true')
     return parser
 
