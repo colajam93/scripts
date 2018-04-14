@@ -7,55 +7,54 @@ import pathlib
 import re
 import subprocess
 import sys
+import typing
 from argparse import ArgumentParser
 from contextlib import closing
 from enum import Enum, auto
 from functools import reduce
 from itertools import tee, filterfalse, chain
-from typing import Optional, Iterable, TypeVar, Callable, Tuple, List, Set
 from urllib.request import urlopen
 
-
-class C:
-    APPEND = 'append'
-    ANONYMOUS = 'Anonymous'
-    CLEAN = 'clean'
-    COMMENT_IDENTIFIER = '#'
-    DOCTOR = 'doctor'
-    GET = 'get'
-    GIT_IGNORE = '.gitignore'
-    GIT_IGNORE_IO_URL_TEMPLATE = 'https://www.gitignore.io/api/{}'
-    INIT = 'init'
-    LIST = 'list'
-    LIST_TEMPLATES = 'list-templates'
-    TEMPLATE_BEGIN_IDENTIFIER = '# Created by'
-    TEMPLATE_END_IDENTIFIER = '# End of'
-    TEMPLATE_NAME_IDENTIFIER = '###'
-    REMOVE = 'remove'
-    UPDATE = 'update'
+APPEND: str = 'append'
+ANONYMOUS: str = 'Anonymous'
+CLEAN: str = 'clean'
+COMMENT_IDENTIFIER: str = '#'
+DOCTOR: str = 'doctor'
+GET: str = 'get'
+GIT_IGNORE: str = '.gitignore'
+GIT_IGNORE_IO_URL_TEMPLATE: str = 'https://www.gitignore.io/api/{}'
+INIT: str = 'init'
+LIST: str = 'list'
+LIST_TEMPLATES: str = 'list-templates'
+TEMPLATE_BEGIN_IDENTIFIER: str = '# Created by'
+TEMPLATE_END_IDENTIFIER: str = '# End of'
+TEMPLATE_NAME_IDENTIFIER: str = '###'
+REMOVE: str = 'remove'
+UPDATE: str = 'update'
 
 
 class AnsiColors:
-    RESET = '\033[0m'
-    RED = '\033[91m'
+    RESET: str = '\033[0m'
+    RED: str = '\033[91m'
 
 
 class Meta:
-    T = TypeVar('T')
+    T = typing.TypeVar('T')
 
 
 class RE:
-    TEMPLATE_NAME = re.compile(fr'^{C.TEMPLATE_NAME_IDENTIFIER} (?P<name>.+) {C.TEMPLATE_NAME_IDENTIFIER}$')
-    INDEXED_ANONYMOUS_NAME = re.compile(fr'^{C.ANONYMOUS}[0-9]+$')
+    TEMPLATE_NAME: typing.Pattern = re.compile(
+        fr'^{TEMPLATE_NAME_IDENTIFIER} (?P<name>.+) {TEMPLATE_NAME_IDENTIFIER}$')
+    INDEXED_ANONYMOUS_NAME: typing.Pattern = re.compile(fr'^{ANONYMOUS}[0-9]+$')
 
 
-class ParseError(BaseException):
+class ParseError(Exception):
     def __init__(self, line: int, message: str) -> None:
         self.line = line
         self.message = message
 
 
-class LexError(BaseException):
+class LexError(Exception):
     def __init__(self, line: int, message: str) -> None:
         self.line = line
         self.message = message
@@ -90,7 +89,8 @@ class EntryType(Enum):
 
 
 class Entry:
-    def __init__(self, entry_type: EntryType, name: str, values: List[Token], url: Optional[str] = None) -> None:
+    def __init__(self, entry_type: EntryType, name: str, values: typing.List[Token],
+                 url: typing.Optional[str] = None) -> None:
         self.entry_type = entry_type
         self.name = name
         self.values = values
@@ -105,7 +105,7 @@ class Entry:
             return f'{begin}-{end}'
 
     def raw_str(self) -> str:
-        name = [f'{C.TEMPLATE_NAME_IDENTIFIER} {self.name} {C.TEMPLATE_NAME_IDENTIFIER}']
+        name = [f'{TEMPLATE_NAME_IDENTIFIER} {self.name} {TEMPLATE_NAME_IDENTIFIER}']
 
         if len(self.values) < 2:
             return '\n'.join(chain(name, map(lambda x: x.raw_str(), self.values)))
@@ -122,9 +122,9 @@ class Entry:
 
 class GitIgnore:
     def __init__(self, raw: str = '') -> None:
-        self.templates: List[Entry] = None
-        self.user_defines: List[Entry] = None
-        self._path: Optional[str] = None
+        self.templates: typing.List[Entry] = None
+        self.user_defines: typing.List[Entry] = None
+        self._path: typing.Optional[str] = None
         tokens = self._lexer(raw)
         self.entries = self._parser(tokens)
 
@@ -135,21 +135,21 @@ class GitIgnore:
         return self._path
 
     @property
-    def entries(self) -> List[Entry]:
+    def entries(self) -> typing.List[Entry]:
         return self.templates + self.user_defines
 
     @entries.setter
-    def entries(self, entries: List[Entry]) -> None:
+    def entries(self, entries: typing.List[Entry]) -> None:
         templates, user_defines = partition(lambda e: e.entry_type == EntryType.TEMPLATE, entries)
         self.templates = list(templates)
         self.user_defines = list(user_defines)
 
     @staticmethod
-    def git_ignore_path(path: Optional[str]) -> str:
-        return path if path else os.path.join(os.getcwd(), C.GIT_IGNORE)
+    def git_ignore_path(path: typing.Optional[str]) -> str:
+        return path if path else os.path.join(os.getcwd(), GIT_IGNORE)
 
     @classmethod
-    def from_file(cls, path: Optional[str]) -> 'GitIgnore':
+    def from_file(cls, path: typing.Optional[str]) -> 'GitIgnore':
         path_ = cls.git_ignore_path(path)
         with open(path_, 'r') as f:
             raw = f.read()
@@ -158,23 +158,23 @@ class GitIgnore:
         return r
 
     @staticmethod
-    def _lexer(raw: str) -> Iterable[Token]:
-        def lex(line: int, s: str) -> Optional[Token]:
+    def _lexer(raw: str) -> typing.Iterable[Token]:
+        def lex(line: int, s: str) -> typing.Optional[Token]:
             if s == '':
                 return None
-            elif s.startswith(C.TEMPLATE_BEGIN_IDENTIFIER):
+            elif s.startswith(TEMPLATE_BEGIN_IDENTIFIER):
                 try:
-                    name = ''.join(s.split(C.TEMPLATE_BEGIN_IDENTIFIER)[1:]).strip()
+                    name = ''.join(s.split(TEMPLATE_BEGIN_IDENTIFIER)[1:]).strip()
                     return Token(TokenType.TEMPLATE_BEGIN, name, line)
                 except IndexError:
                     raise LexError(line, 'Invalid template begin token')
-            elif s.startswith(C.TEMPLATE_END_IDENTIFIER):
+            elif s.startswith(TEMPLATE_END_IDENTIFIER):
                 try:
-                    name = ''.join(s.split(C.TEMPLATE_END_IDENTIFIER)[1:]).strip()
+                    name = ''.join(s.split(TEMPLATE_END_IDENTIFIER)[1:]).strip()
                     return Token(TokenType.TEMPLATE_END, name, line)
                 except IndexError:
                     raise LexError(line, 'Invalid template end token')
-            elif s.startswith(C.TEMPLATE_NAME_IDENTIFIER):
+            elif s.startswith(TEMPLATE_NAME_IDENTIFIER):
                 m = re.match(RE.TEMPLATE_NAME, s)
                 if not m:
                     raise LexError(line, 'Invalid template name token')
@@ -183,7 +183,7 @@ class GitIgnore:
                 except IndexError as e:
                     raise LexError from e
                 return Token(TokenType.TEMPLATE_NAME, name, line)
-            elif s.startswith(C.COMMENT_IDENTIFIER):
+            elif s.startswith(COMMENT_IDENTIFIER):
                 return Token(TokenType.COMMENT, s, line)
             else:
                 return Token(TokenType.PATTERN, s, line)
@@ -191,9 +191,9 @@ class GitIgnore:
         return filter(None, (lex(line, s) for (line, s) in enumerate(raw.split('\n'), 1)))
 
     @staticmethod
-    def _parser(tokens: Iterable[Token]) -> List[Entry]:
+    def _parser(tokens: typing.Iterable[Token]) -> typing.List[Entry]:
         url = ''
-        name = C.ANONYMOUS
+        name = ANONYMOUS
         state = EntryType.USER_DEFINED
         current = []
         result = []
@@ -211,7 +211,7 @@ class GitIgnore:
                     save_current()
                     url = token.value
                     state = EntryType.TEMPLATE
-                    name = C.ANONYMOUS
+                    name = ANONYMOUS
                 else:
                     raise ParseError(token.line, f'Unexpected {token.token_type}')
             elif token.token_type == TokenType.TEMPLATE_END:
@@ -219,7 +219,7 @@ class GitIgnore:
                     save_current()
                     url = None
                     state = EntryType.USER_DEFINED
-                    name = C.ANONYMOUS
+                    name = ANONYMOUS
                 else:
                     raise ParseError(token.line, f'Unexpected {token.token_type}')
             elif token.token_type == TokenType.TEMPLATE_NAME:
@@ -235,14 +235,14 @@ class GitIgnore:
         return result
 
     def raw_str(self) -> str:
-        def f(es: Iterable[Entry]) -> Iterable[str]:
+        def f(es: typing.Iterable[Entry]) -> typing.Iterable[str]:
             return map(lambda x: x.raw_str(), es)
 
         # if there is no templates then suppress the template identifier line
         if self.templates:
-            url = f'gim (This {C.GIT_IGNORE} is managed by gim)'
-            prologue = [f'{C.TEMPLATE_BEGIN_IDENTIFIER} {url}']
-            epilogue = [f'{C.TEMPLATE_END_IDENTIFIER} {url}']
+            url = f'gim (This {GIT_IGNORE} is managed by gim)'
+            prologue = [f'{TEMPLATE_BEGIN_IDENTIFIER} {url}']
+            epilogue = [f'{TEMPLATE_END_IDENTIFIER} {url}']
             return '\n\n'.join(chain(prologue, f(self.templates), epilogue, f(self.user_defines)))
         else:
             return '\n\n'.join(f(self.user_defines))
@@ -252,7 +252,8 @@ def print_error(s: str, **kwargs) -> None:
     print(f'{AnsiColors.RED}{s}{AnsiColors.RESET}', **kwargs)
 
 
-def partition(p: Callable[[Meta.T], bool], iterable: Iterable[Meta.T]) -> Tuple[Iterable[Meta.T], Iterable[Meta.T]]:
+def partition(p: typing.Callable[[Meta.T], bool], iterable: typing.Iterable[Meta.T]) \
+        -> typing.Tuple[typing.Iterable[Meta.T], typing.Iterable[Meta.T]]:
     t1, t2 = tee(iterable)
     return filter(p, t2), filterfalse(p, t1)
 
@@ -267,21 +268,21 @@ def query(url: str) -> str:
 
 
 def generate_api_url(payload: str) -> str:
-    return C.GIT_IGNORE_IO_URL_TEMPLATE.format(payload)
+    return GIT_IGNORE_IO_URL_TEMPLATE.format(payload)
 
 
-def get_available_templates() -> List[str]:
-    url = generate_api_url(C.LIST)
+def get_available_templates() -> typing.List[str]:
+    url = generate_api_url(LIST)
     result = query(url)
     return [y for x in result.strip().split('\n') for y in x.split(',')]
 
 
-def get_templates(templates: Iterable[str]) -> str:
+def get_templates(templates: typing.Iterable[str]) -> str:
     url = generate_api_url(','.join(map(to_lower, templates)))
     return query(url)
 
 
-def merge_entry(lhs: Entry, rhs: Entry, name: str, url: Optional[str] = None) -> Entry:
+def merge_entry(lhs: Entry, rhs: Entry, name: str, url: typing.Optional[str] = None) -> Entry:
     assert lhs.entry_type == rhs.entry_type
     return Entry(lhs.entry_type, name, lhs.values + rhs.values, url)
 
@@ -292,7 +293,7 @@ def write_git_ignore(path: str, gi: GitIgnore) -> None:
         f.write('\n')
 
 
-def run_for_output(command: List[str]) -> str:
+def run_for_output(command: typing.List[str]) -> str:
     completed = subprocess.run(command, stdout=subprocess.PIPE)
     return completed.stdout.decode()
 
@@ -302,24 +303,24 @@ def global_git_ignore_path() -> str:
     return config_value if config_value else os.path.join(str(pathlib.Path().home()), '.config', 'git', 'ignore')
 
 
-def do_append(file: Optional[str], templates: List[str]) -> None:
+def do_append(file: typing.Optional[str], templates: typing.List[str]) -> None:
     gi = GitIgnore.from_file(file)
     result = GitIgnore(get_templates(templates))
     gi.templates += result.templates
     write_git_ignore(gi.path, gi)
 
 
-def do_get(templates: List[str]) -> None:
+def do_get(templates: typing.List[str]) -> None:
     result = get_templates(templates)
     print(result)
 
 
-def do_list(file: Optional[str]) -> None:
+def do_list(file: typing.Optional[str]) -> None:
     anonymous_counter = 0
 
     def f(e: Entry) -> str:
         nonlocal anonymous_counter
-        if e.name == C.ANONYMOUS:
+        if e.name == ANONYMOUS:
             r = f'{e.name}{anonymous_counter}({e.range_str()})'
             anonymous_counter += 1
             return r
@@ -333,7 +334,7 @@ def do_list(file: Optional[str]) -> None:
         print('user defined patterns: {}'.format(','.join(map(f, gi.user_defines))))
 
 
-def do_list_templates(templates: List[str]) -> None:
+def do_list_templates(templates: typing.List[str]) -> None:
     available_templates = get_available_templates()
     if templates:
         available, not_available = partition(lambda x: x in available_templates, map(lambda x: x.lower(), templates))
@@ -346,13 +347,13 @@ def do_list_templates(templates: List[str]) -> None:
             print(t)
 
 
-def do_clean(file: Optional[str], dry_run: bool) -> None:
-    def normalize_anonymous_entries(entries: List[Entry]) -> List[Entry]:
-        t = partition(lambda x: x.name == C.ANONYMOUS, entries)
+def do_clean(file: typing.Optional[str], dry_run: bool) -> None:
+    def normalize_anonymous_entries(entries: typing.List[Entry]) -> typing.List[Entry]:
+        t = partition(lambda x: x.name == ANONYMOUS, entries)
         unnamed_entries, named_entries = list(t[0]), list(t[1])
         r = named_entries
         if unnamed_entries:
-            r.append(reduce(lambda x, y: merge_entry(x, y, C.ANONYMOUS), unnamed_entries))
+            r.append(reduce(lambda x, y: merge_entry(x, y, ANONYMOUS), unnamed_entries))
         return r
 
     source = GitIgnore.from_file(file)
@@ -365,26 +366,26 @@ def do_clean(file: Optional[str], dry_run: bool) -> None:
         write_git_ignore(source.path, new)
 
 
-def do_remove(file: Optional[str], targets: List[str], dry_run: bool) -> None:
-    def add_index(entries: List[Entry]) -> List[Entry]:
+def do_remove(file: typing.Optional[str], targets: typing.List[str], dry_run: bool) -> None:
+    def add_index(entries: typing.List[Entry]) -> typing.List[Entry]:
         anonymous_counter = 0
         r = []
         for e in entries:
-            if e.name == C.ANONYMOUS:
+            if e.name == ANONYMOUS:
                 tmp = e
-                tmp.name = f'{C.ANONYMOUS}{anonymous_counter}'
+                tmp.name = f'{ANONYMOUS}{anonymous_counter}'
                 anonymous_counter += 1
                 r.append(tmp)
             else:
                 r.append(e)
         return r
 
-    def remove_index(entries: List[Entry]) -> List[Entry]:
+    def remove_index(entries: typing.List[Entry]) -> typing.List[Entry]:
         r = []
         for e in entries:
             if re.match(RE.INDEXED_ANONYMOUS_NAME, e.name):
                 tmp = e
-                tmp.name = C.ANONYMOUS
+                tmp.name = ANONYMOUS
                 r.append(tmp)
             else:
                 r.append(e)
@@ -410,22 +411,22 @@ def do_remove(file: Optional[str], targets: List[str], dry_run: bool) -> None:
         write_git_ignore(source.path, new)
 
 
-def do_init(templates: List[str], force: bool) -> None:
-    path = os.path.join(os.getcwd(), C.GIT_IGNORE)
+def do_init(templates: typing.List[str], force: bool) -> None:
+    path = os.path.join(os.getcwd(), GIT_IGNORE)
     if not force and os.path.exists(path):
         raise FileExistsError(errno.EEXIST, os.strerror(errno.EEXIST), path)
     gi = GitIgnore(get_templates(templates))
     write_git_ignore(path, gi)
 
 
-def do_update(file: Optional[str]) -> None:
+def do_update(file: typing.Optional[str]) -> None:
     source = GitIgnore.from_file(file)
     available = get_available_templates()
     exists, not_exists = partition(lambda x: x.name.lower() in available, source.templates)
     new = GitIgnore(get_templates(map(lambda x: x.name.lower(), exists)))
     new_names = [x.name.lower() for x in new.templates]
     for i in not_exists:
-        if i.name == C.ANONYMOUS:
+        if i.name == ANONYMOUS:
             new.templates.append(i)
         elif i.name.lower() not in new_names:
             print_error(f'warning: template {i.name} was not found', file=sys.stderr)
@@ -434,8 +435,8 @@ def do_update(file: Optional[str]) -> None:
     write_git_ignore(source.path, new)
 
 
-def do_doctor(file: Optional[str], global_file: Optional[str]) -> None:
-    def check(entries: List[Entry], is_template: bool, global_entries: Set[str] = set()) -> bool:
+def do_doctor(file: typing.Optional[str], global_file: typing.Optional[str]) -> None:
+    def check(entries: typing.List[Entry], is_template: bool, global_entries: typing.Set[str] = set()) -> bool:
         if is_template:
             print('templates:')
         else:
@@ -447,13 +448,13 @@ def do_doctor(file: Optional[str], global_file: Optional[str]) -> None:
                 # to avoid warn same entry, track printed warning information in dict
                 s[entry.name] = False
                 r = False
-                if entry.name == C.ANONYMOUS:
+                if entry.name == ANONYMOUS:
                     print_error(
-                        f"warning: there were multiple {entry.name} entries (use 'gim {C.CLEAN}' to merge them)")
+                        f"warning: there were multiple {entry.name} entries (use 'gim {CLEAN}' to merge them)")
                 else:
                     if is_template:
                         print_error(
-                            f"warning: template {entry.name} was duplicated (use 'gim {C.UPDATE}' to merge them)")
+                            f"warning: template {entry.name} was duplicated (use 'gim {UPDATE}' to merge them)")
                     else:
                         print_error(f'warning: template {entry.name} was duplicated (merge them manually)')
             elif entry.name in global_entries:
@@ -461,7 +462,7 @@ def do_doctor(file: Optional[str], global_file: Optional[str]) -> None:
                 if is_template:
                     print_error(
                         f"warning: template {entry.name} has already included in global gitignore"
-                        f" (use 'gim {C.REMOVE} {entry.name}' to remove them)")
+                        f" (use 'gim {REMOVE} {entry.name}' to remove them)")
                 else:
                     print_error(
                         f'warning: template {entry.name} has already included in global gitignore (merge them manually)')
@@ -510,52 +511,52 @@ def do_doctor(file: Optional[str], global_file: Optional[str]) -> None:
 def build_parser() -> ArgumentParser:
     def setup_sub_commands_parser(scp) -> None:
         def setup_list_parser(ps) -> None:
-            p = ps.add_parser(C.LIST, help=f'print list of entries in {C.GIT_IGNORE}')
+            p = ps.add_parser(LIST, help=f'print list of entries in {GIT_IGNORE}')
             p.add_argument('-i', '--input-file', default=None)
             p.set_defaults(func=lambda a: do_list(a.input_file))
 
         def setup_list_templates_parser(ps) -> None:
-            p = ps.add_parser(C.LIST_TEMPLATES, help='print list of available templates in gitignore.io')
+            p = ps.add_parser(LIST_TEMPLATES, help='print list of available templates in gitignore.io')
             p.add_argument('templates', nargs='*')
             p.set_defaults(func=lambda a: do_list_templates(a.templates))
 
         def setup_get_parser(ps) -> None:
-            p = ps.add_parser(C.GET, help='download and print templates from gitignore.io')
+            p = ps.add_parser(GET, help='download and print templates from gitignore.io')
             p.add_argument('templates', nargs='+')
             p.set_defaults(func=lambda a: do_get(a.templates))
 
         def setup_append_parser(ps) -> None:
-            p = ps.add_parser(C.APPEND, help=f'download and append templates to {C.GIT_IGNORE}')
+            p = ps.add_parser(APPEND, help=f'download and append templates to {GIT_IGNORE}')
             p.add_argument('-i', '--input-file', default=None)
             p.add_argument('templates', nargs='+')
             p.set_defaults(func=lambda a: do_append(a.input_file, a.templates))
 
         def setup_clean_parser(ps) -> None:
-            p = ps.add_parser(C.CLEAN, help='merge entries')
+            p = ps.add_parser(CLEAN, help='merge entries')
             p.add_argument('-i', '--input-file', default=None)
             p.add_argument('-n', '--dry-run', action='store_true')
             p.set_defaults(func=lambda a: do_clean(a.input_file, a.dry_run))
 
         def setup_remove_parser(ps) -> None:
-            p = ps.add_parser(C.REMOVE, help='remove entries')
+            p = ps.add_parser(REMOVE, help='remove entries')
             p.add_argument('-i', '--input-file', default=None)
             p.add_argument('-n', '--dry-run', action='store_true')
             p.add_argument('target', nargs='+')
             p.set_defaults(func=lambda a: do_remove(a.input_file, a.target, a.dry_run))
 
         def setup_init_parser(ps) -> None:
-            p = ps.add_parser(C.INIT, help=f'download templates and create new {C.GIT_IGNORE}')
+            p = ps.add_parser(INIT, help=f'download templates and create new {GIT_IGNORE}')
             p.add_argument('templates', nargs='+')
             p.add_argument('-f', '--force', action='store_true', help='force overwrite')
             p.set_defaults(func=lambda a: do_init(a.templates, a.force))
 
         def setup_update_parser(ps) -> None:
-            p = ps.add_parser(C.UPDATE, help='re-download templates')
+            p = ps.add_parser(UPDATE, help='re-download templates')
             p.add_argument('-i', '--input-file', default=None)
             p.set_defaults(func=lambda a: do_update(a.input_file))
 
         def setup_doctor_parser(ps) -> None:
-            p = ps.add_parser(C.DOCTOR, help=f'check {C.GIT_IGNORE}')
+            p = ps.add_parser(DOCTOR, help=f'check {GIT_IGNORE}')
             p.add_argument('-i', '--input-file', default=None)
             p.add_argument('-g', '--input-file-global', default=None)
             p.set_defaults(func=lambda a: do_doctor(a.input_file, a.input_file_global))
