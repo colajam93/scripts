@@ -62,6 +62,7 @@ def unzip(working_dir: str, zip_file: ZipFile, out_dir_path: pathlib.Path, encod
         if destination_path.exists():
             print_error(f"'{destination_path}' is already exists. skipping...")
         else:
+            destination_path.parent.mkdir(parents=True, exist_ok=True)
             shutil.move(extracted_path, str(destination_path))
 
 
