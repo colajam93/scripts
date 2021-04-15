@@ -10,7 +10,7 @@ command=$1
 function check {
     local target
     target=$(readlink -f "$1")
-    AtomicParsley "$target" -T | grep -q "jpn"
+    atomicparsley "$target" -T | grep -q "jpn"
     return $?
 }
 
@@ -24,7 +24,7 @@ function fix {
     cp "$target" "$(dirname "$target")/backup_$(basename "$target")"
     local filename
     filename=$(basename "$target")
-    AtomicParsley "$target" --manualAtomRemove moov.udta.albm:lang=jpn --manualAtomRemove moov.udta.cprt:lang=jpn --manualAtomRemove moov.udta.dscp:lang=jpn --manualAtomRemove moov.udta.gnre:lang=jpn --manualAtomRemove moov.udta.perf:lang=jpn --manualAtomRemove moov.udta.titl:lang=jpn -o "$(dirname "$target")/${filename%.*}_fixed.${filename##*.}"
+    atomicparsley "$target" --manualAtomRemove moov.udta.albm:lang=jpn --manualAtomRemove moov.udta.cprt:lang=jpn --manualAtomRemove moov.udta.dscp:lang=jpn --manualAtomRemove moov.udta.gnre:lang=jpn --manualAtomRemove moov.udta.perf:lang=jpn --manualAtomRemove moov.udta.titl:lang=jpn -o "$(dirname "$target")/${filename%.*}_fixed.${filename##*.}"
 }
 
 if [[ $command == "check" ]]; then
