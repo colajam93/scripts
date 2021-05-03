@@ -4,8 +4,8 @@ My scripts
 
 ## Install
 
-```
-$ bash install.sh
+```sh
+bash install.sh
 ```
 
 and add `$HOME/.local/bin` to `$PATH`
