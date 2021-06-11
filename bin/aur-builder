@@ -3,10 +3,12 @@
 # global variables
 # list of update avaliable packages
 _aur_builder_target_packages=()
+_aur_builder_dockerfile_dir="$(ghq root)/github.com/colajam93/aur-builder"
+_aur_builder_output_path="${HOME}/Downloads:/home/builder/pkg"
 
 # functions
 _aur_builder_build_image() {
-    DOCKER_BUILDKIT=1 docker build --pull --no-cache -t aur-builder "$(ghq root)/github.com/colajam93/aur-builder"
+    DOCKER_BUILDKIT=1 docker build --pull --no-cache -t aur-builder "${_aur_builder_dockerfile_dir}"
 }
 
 _aur_builder_list_package() {
@@ -70,7 +72,11 @@ _aur_builder_build_package() {
     if [[ ${#_aur_builder_target_packages[@]} -eq 0 ]]; then
         return
     fi
-    docker run --rm -v ~/Downloads:/home/builder/pkg aur-builder -S "${_aur_builder_target_packages[@]}" --noconfirm
+    docker run --rm -v "${_aur_builder_output_path}" aur-builder -S "${_aur_builder_target_packages[@]}" --noconfirm
+}
+
+_aur_builder_shell() {
+    docker run --rm --entrypoint=/bin/bash -it -v "${_aur_builder_output_path}" aur-builder
 }
 
 _aur_builder_help() {
@@ -111,6 +117,8 @@ elif [[ $cmd == "build-package" ]]; then
     package_info="$(_aur_builder_collect_package_info)"
     _aur_builder_collect_update_avaiable_package "${package_info}"
     _aur_builder_build_package
+elif [[ $cmd == "shell" ]]; then
+    _aur_builder_shell
 else
     _aur_builder_help
 fi
