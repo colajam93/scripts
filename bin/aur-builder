@@ -7,12 +7,23 @@ _aur_builder_dockerfile_dir="$(ghq root)/github.com/colajam93/aur-builder"
 _aur_builder_output_path="${HOME}/Downloads:/home/builder/pkg"
 
 # functions
+
+_aur_builder_echoerr() {
+    echo "$@" 1>&2; 
+}
+
 _aur_builder_build_image() {
     DOCKER_BUILDKIT=1 docker build --pull --no-cache -t aur-builder "${_aur_builder_dockerfile_dir}"
 }
 
 _aur_builder_list_package() {
     pacman -Ss | grep 'aur/' | sed 's:^aur/\([a-z0-9-]*\) .*$:\1:'
+}
+
+_aur_builder_get_local_name() {
+    local package
+    package=$1
+    pacman -Qi "${package}" 2> /dev/null | grep Name | sed 's/^.*: \(.*\)$/\1/'
 }
 
 _aur_builder_get_local_version() {
@@ -32,6 +43,14 @@ _aur_builder_collect_package_info() {
     local local_version
     local aur_version
     for i in $(_aur_builder_list_package); do
+        local_name=$(_aur_builder_get_local_name "$i")
+        # check provides: only exact matched packages will be built
+        if [[ "${local_name}" != "$i" ]]; then
+            local_version=''
+            aur_version=''
+            echo '{"name": "'"$i"'", "local": "'"$local_version"'", "aur": "'"$aur_version"'"}' | jq -c .
+            continue
+        fi
         local_version=$(_aur_builder_get_local_version "$i")
         aur_version=$(_aur_builder_get_aur_version "$i")
         echo '{"name": "'"$i"'", "local": "'"$local_version"'", "aur": "'"$aur_version"'"}' | jq -c .
