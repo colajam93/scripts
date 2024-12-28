@@ -1,3 +1,0 @@
-#!/bin/sh -e
-
-git branch --merged | grep -E -v "(^\*|master|dev|main)" | xargs -r git branch -d
